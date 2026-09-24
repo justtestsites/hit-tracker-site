@@ -91,6 +91,7 @@
   .sp b { color:var(--text2); font-weight:600; }
   .side { display:flex; align-items:center; gap:10px; }
   .today { font-weight:700; font-size:13.5px; min-width:34px; text-align:right; }
+  .today .pa { font-weight:600; font-size:11px; color:var(--text3); white-space:nowrap; margin-top:2px; }
   .today.z { color:var(--orange); } .today.h { color:var(--green); }
   .pill { min-width:74px; text-align:center; padding:7px 10px; border-radius:10px; font-weight:800; font-size:15px; letter-spacing:-.01em; border:1px solid var(--white-line); background:var(--white-bg); color:var(--text); }
   .pill.take { background:var(--green-bg); border-color:var(--green-line); color:var(--green); }
@@ -147,7 +148,7 @@
     <div id="live-picks"></div>
     <div class="grid" id="live-games"></div>
     <p class="foot" id="live-note"></p>
-    <div class="legend"><span><i style="background:var(--green)"></i>Take</span><span><i style="background:#fff;opacity:.85"></i>Neutral</span><span><i style="background:var(--orange)"></i>Risky</span><span><i style="background:var(--dead)"></i>Already has a hit</span><span>0-2 = hits–at bats today</span><span>Dots = last 10 games, green = got a hit</span></div>
+    <div class="legend"><span><i style="background:var(--green)"></i>Take</span><span><i style="background:#fff;opacity:.85"></i>Neutral</span><span><i style="background:var(--orange)"></i>Risky</span><span><i style="background:var(--dead)"></i>Already has a hit</span><span>0-2 = hits–at bats · PA = trips to the plate incl. walks</span><span>Dots = last 10 games, green = got a hit</span></div>
     <div class="foot">Targets = favored before first pitch, still hitless, price now better than pregame. Green = worth a look now; orange = late innings or the book has already priced it as unlikely.</div>
   </section>
 
@@ -229,8 +230,16 @@ function oddsBox(v, now, pre, showTag = true) {
   if (pre != null && pre !== now) { const d = now - pre; preHtml = `<div class="pre ${d > 0 ? 'up' : 'down'}">was ${odds(pre)}</div>`; }
   return `<div class="oddsbox"><div class="pill ${v}">${odds(now)}</div>${preHtml}${showTag ? `<div class="tag ${v}">${TAG[v]}</div>` : ''}</div>`;
 }
+function todayHtml(r) {
+  if (r.hits == null) return '';
+  const extras = [];
+  if (r.bb) extras.push(`${r.bb} BB`);
+  if (r.hbp) extras.push(`${r.hbp} HBP`);
+  const pa = r.pa != null ? `${r.pa} PA${extras.length ? ' · ' + extras.join(', ') : ''}` : '';
+  return `<div class="today ${r.hits === 0 ? 'z' : 'h'}"><div>${r.hits}-${r.ab}</div>${pa ? `<div class="pa">${pa}</div>` : ''}</div>`;
+}
 function playerRow(r, v, opts = {}) {
-  const today = r.hits == null ? '' : `<div class="today ${r.hits === 0 ? 'z' : 'h'}">${r.hits}-${r.ab}</div>`;
+  const today = todayHtml(r);
   const sp = opts.sp && r.sp ? `<span class="sp">vs <b>${esc(r.sp)}</b>${r.sp_form?.baa ? ` · BAA ${esc(r.sp_form.baa)}` : ''}${r.sp_form?.h9 ? ` · ${r.sp_form.h9} H/9` : ''}</span>` : '';
   return `<div class="row ${v === 'dead' ? 'dead' : ''}">
     <div class="tm">${esc(r.team || '—')}</div>
@@ -249,7 +258,7 @@ function card(ev, rowsHtml, meta, start) {
 }
 function picksBox(list, title, sub, ctxOf) {
   if (!list.length) return '';
-  return `<div class="picks"><h2>✓ ${title}</h2><p>${sub}</p><div class="pick-grid">${list.map(({ r, v }) => `<div class="pick"><div class="tm">${esc(r.team || '—')}</div><div class="mid"><div class="nm">${esc(r.player)}</div><div class="ctx">${ctxOf(r)}</div></div>${r.hits != null ? `<div class="today ${r.hits === 0 ? 'z' : 'h'}">${r.hits}-${r.ab}</div>` : ''}${oddsBox(v, r.odds, r.pre, false)}</div>`).join('')}</div></div>`;
+  return `<div class="picks"><h2>✓ ${title}</h2><p>${sub}</p><div class="pick-grid">${list.map(({ r, v }) => `<div class="pick"><div class="tm">${esc(r.team || '—')}</div><div class="mid"><div class="nm">${esc(r.player)}</div><div class="ctx">${ctxOf(r)}</div></div>${todayHtml(r)}${oddsBox(v, r.odds, r.pre, false)}</div>`).join('')}</div></div>`;
 }
 const groupBy = (xs, k) => { const m = new Map(); for (const x of xs) { const kk = k(x); (m.get(kk) || m.set(kk, []).get(kk)).push(x); } return m; };
 const matchQ = (r, q) => !q || (r.player + ' ' + stripPitchers(r.event) + ' ' + (r.team || '')).toLowerCase().includes(q);
