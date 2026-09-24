@@ -143,7 +143,7 @@ const KEY = {
     ['Opened', 'The first price FanDuel posted for him.'],
     ['Now', 'The current price, for games that have not started.'],
     ['Closed', 'The last price before first pitch. Line movement is about the pregame market, so in-game prices are not shown here. They are on the Live tab.'],
-    ['Change', 'How far the price has moved since it opened. More favored means the book likes his chances more than it did.'],
+    ['Change', 'How far the price has moved since it opened, in points. Odds skip from -100 straight to +100, so +100 to -120 counts as 20, not 220. More favored means the book likes his chances more than it did.'],
     ['Trend', 'Each step the price took during the day. Shown once there are at least 3 prices.'],
     ['More favored only', 'Just the hitters whose price got more favored since it opened.'],
   ]],
@@ -205,6 +205,8 @@ const lastName = n => String(n || '').split(' ').slice(-1)[0];
 const groupBy = (xs, k) => { const m = new Map(); for (const x of xs) { const kk = k(x); (m.get(kk) || m.set(kk, []).get(kk)).push(x); } return m; };
 const matchQ = (r, q) => !q || (r.player + ' ' + stripPitchers(r.event) + ' ' + (r.team || '')).toLowerCase().includes(q);
 const isTarget = r => r.pre != null && r.pre <= -150 && r.hits === 0 && r.odds > r.pre;
+const cents = o => o == null ? null : o > 0 ? o - 100 : o + 100;            // American odds skip -100..+100; this scale closes the gap
+const diffOdds = (now, then) => now == null || then == null ? null : cents(now) - cents(then);   // negative = more favored
 const toDec = a => a > 0 ? 1 + a / 100 : 1 + 100 / Math.abs(a);
 const toAmer = d => d >= 2 ? '+' + Math.round((d - 1) * 100) : String(Math.round(-100 / (d - 1)));
 const implied = a => a > 0 ? 100 / (a + 100) : Math.abs(a) / (Math.abs(a) + 100);
@@ -290,7 +292,7 @@ function dots(r) {
   return '';
 }
 function spark(points) {
-  const ys = points.map(p => p[1]);
+  const ys = points.map(p => cents(p[1]));
   if (ys.length < 3) return `<span class="inline-block text-muted-foreground">${ys.length === 2 ? (ys[1] < ys[0] ? '▲' : '▼') : '—'}</span>`;
   const lo = Math.min(...ys), hi = Math.max(...ys), span = Math.max(1, hi - lo), W = 64, H = 18, pad = 2;
   const X = i => pad + i * (W - 2 * pad) / (ys.length - 1), Y = y => pad + ((y - lo) / span) * (H - 2 * pad);
@@ -457,14 +459,14 @@ function renderLive() {
     const hb = withV.filter(x => isHotSpot(x.r, d.games?.[x.r.event]) && x.v !== 'dead').sort((a, b) => avgOf(b.r) - avgOf(a.r) || a.r.odds - b.r.odds).slice(0, 12);
     $('#live-picks').innerHTML = picksBox(hb, 'Hot bats still hitless', `Hitting ${fmtAvg(HOT_AVG)} or better this season, no hit yet, 4th inning or later, and due to bat again. Highest average first.`, liveCells, liveCols);
   } else {
-    const takes = withV.filter(x => x.v === 'take' && isTarget(x.r)).sort((a, b) => (b.r.odds - b.r.pre) - (a.r.odds - a.r.pre));
+    const takes = withV.filter(x => x.v === 'take' && isTarget(x.r)).sort((a, b) => diffOdds(b.r.odds, b.r.pre) - diffOdds(a.r.odds, a.r.pre));
     $('#live-picks').innerHTML = picksBox(takes, 'Best spots right now', 'Favored before the game, no hit yet, more at bats coming, and a better price than pregame.', liveCells, liveCols);
   }
   const keep = withV.filter(({ r, v }) => matchQ(r, q) && (f === 'all' || (f === 'targets' && isTarget(r)) || (f === 'streak' && r.streak >= 3 && r.hits === 0) || (f === 'hot' && isHotSpot(r, d.games?.[r.event]))));
   const order = { take: 0, neutral: 1, risky: 2, dead: 3 }, innOf = ev => inningNum(d.games?.[ev]?.inning) ?? 99;
   const out = [];
   for (const [ev, xs] of [...groupBy(keep, x => x.r.event)].sort((a, b) => innOf(a[0]) - innOf(b[0]))) {
-    xs.sort((a, b) => order[a.v] - order[b.v] || ((b.r.pre != null ? b.r.odds - b.r.pre : -1e9) - (a.r.pre != null ? a.r.odds - a.r.pre : -1e9)));
+    xs.sort((a, b) => order[a.v] - order[b.v] || ((b.r.pre != null ? diffOdds(b.r.odds, b.r.pre) : -1e9) - (a.r.pre != null ? diffOdds(a.r.odds, a.r.pre) : -1e9)));
     out.push(gameSection(ev, xs.map(({ r, v }) => tile(r, v)).join(''), d.games?.[ev], xs[0].r.start));
   }
   $('#live-note').textContent = (f === 'targets' && d.rows.some(r => r.pre == null && r.hits === 0)) ? 'A few hitless players are hidden because we never captured a pregame price for them. They show under Everyone.' : '';
@@ -494,7 +496,7 @@ function renderBoard() {
 }
 const tdc = 'px-4 py-2.5 align-middle';
 function moveRow(m) {
-  const d = m.now - m.open, cls = d < 0 ? 'text-take' : d > 0 ? 'text-down' : 'text-muted-foreground';
+  const d = diffOdds(m.now, m.open), cls = d < 0 ? 'text-take' : d > 0 ? 'text-down' : 'text-muted-foreground';
   const last = m.points.length > 1 ? new Date(m.points[m.points.length - 1][0]).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
   return `<tr class="border-b border-border last:border-0">
     <td class="${tdc} w-full max-w-0 sm:w-auto sm:max-w-none"><div class="flex items-center gap-2 font-medium"><span class="shrink-0">${logo(m.team, 18)}</span><span class="truncate sm:whitespace-nowrap sm:overflow-visible">${esc(m.player)}</span></div>${m.streak >= 3 ? `<div class="text-xs text-muted-foreground">${m.streak}-game hit streak</div>` : ''}</td>
@@ -525,11 +527,11 @@ function renderMove() {
   $('#n-move').textContent = rows.filter(m => m.now < m.open).length;
   if (!rows.length) { $('#move-top').innerHTML = ''; $('#move-games').innerHTML = empty('No lines captured yet.'); return; }
   const liveEv = new Set((DATA.live?.rows || []).map(r => r.event)), now = Date.now(), pregame = m => !m.start || new Date(m.start) > now;
-  const movers = rows.filter(m => pregame(m) && m.now < m.open).sort((a, b) => (a.now - a.open) - (b.now - b.open)).slice(0, 10);
+  const movers = rows.filter(m => pregame(m) && m.now < m.open).sort((a, b) => diffOdds(a.now, a.open) - diffOdds(b.now, b.open)).slice(0, 10);
   $('#move-top').innerHTML = `<div class="card"><div class="px-5 pt-4 pb-3"><div class="text-[15px] font-semibold">Getting more favored</div><div class="text-sm text-muted-foreground">Pregame lines that have gotten more favored since they opened. Once a game starts its line is closed and in-game prices live on the Live tab.</div></div><div class="border-t border-border">${movers.length ? moveTable(movers) : empty('No pregame lines have gotten more favored yet today.')}</div></div>`;
   const keep = rows.filter(m => matchQ(m, q) && (f === 'all' || (f === 'live' && liveEv.has(m.event)) || (f === 'movers' && m.now < m.open)));
   const games = [...groupBy(keep, m => m.event)].sort((a, b) => (a[1][0].start || '').localeCompare(b[1][0].start || ''));
-  $('#move-games').innerHTML = games.map(([ev, ms]) => { ms.sort((a, b) => (a.now - a.open) - (b.now - b.open)); return `<div>${sectionHead(ev, DATA.live?.games?.[ev], ms[0].start)}<div class="card">${moveTable(ms, ms[0].closed)}</div></div>`; }).join('') || empty('Nothing matches.');
+  $('#move-games').innerHTML = games.map(([ev, ms]) => { ms.sort((a, b) => diffOdds(a.now, a.open) - diffOdds(b.now, b.open)); return `<div>${sectionHead(ev, DATA.live?.games?.[ev], ms[0].start)}<div class="card">${moveTable(ms, ms[0].closed)}</div></div>`; }).join('') || empty('Nothing matches.');
   const rep = DATA.report;
   if (rep?.rows?.length) {
     const moved = rep.rows.filter(r => r.move != null && Math.abs(r.move) >= 20).sort((a, b) => Math.abs(b.move) - Math.abs(a.move)).slice(0, 20);
