@@ -95,11 +95,12 @@ const KEY = {
     [W('rate-taxed', 'Taxed'), 'Two or more of their best relievers are worn out from the last two days. Weaker arms pitch late, which helps the hitter.'],
   ]],
   again: ['Bats again', [
-    [`<span class="text-take">Yes</span>`, 'His spot in the order is coming up again for sure.'],
+    [`<span class="text-take">Yes</span>`, 'His spot in the order is coming up again for sure. Bats again always means after the at bat he is in right now.'],
     [`<span class="text-take">Should</span>`, 'He most likely gets another at bat.'],
     ['Maybe', 'It is close. He might not get another at bat.'],
     ['Leads off next inning', 'The other team is batting right now. He is first up when his team comes back in.'],
     [`<span class="text-risky">Probably not</span>`, 'The game will likely end before his spot comes up again.'],
+    [`<span class="text-risky">Last at bat</span>`, 'He is at the plate right now and his spot will not come around again. This at bat is the only chance left.'],
   ]],
   odds: ['Odds', [
     ['-200', 'Favored. The book thinks he will get a hit. You risk $200 to win $100.'],
@@ -189,12 +190,14 @@ const when = iso => iso ? new Date(iso).toLocaleTimeString([], { hour: 'numeric'
 const inningWords = t => { if (!t) return ''; return t.replace(/^(Top|Bottom|Middle|End)\s+(\d+\w\w)$/, (m, a, b) => ({ Top: 'Top of the', Bottom: 'Bottom of the', Middle: 'Middle of the', End: 'End of the' })[a] + ' ' + b); };
 const inningNum = t => { const m = /(\d+)/.exec(t || ''); return m ? +m[1] : null; };
 const l10n = r => { const m = /^(\d+)\/(\d+)/.exec(r.last10 || ''); return m ? [+m[1], +m[2]] : null; };
-const AGAIN = { yes: 'Will bat again', likely: 'Should bat again', maybe: 'Might not bat again', unlikely: 'Probably done for the day', unknown: '' };
+const AGAIN = { yes: 'Will bat again', likely: 'Should bat again', maybe: 'Might not bat again', unlikely: 'Probably done for the day', last: 'Last at bat', unknown: '' };
+const againWord = v => v === 'yes' ? 'Yes' : v === 'likely' ? 'Should' : v === 'maybe' ? 'Maybe' : v === 'last' ? 'Last at bat' : 'Probably not';
+const againCls = v => v === 'unlikely' || v === 'last' ? 'text-risky' : v === 'maybe' ? 'text-foreground' : 'text-take';
 // where his spot is. When the other team is batting, "0" means he leads off when his team comes up.
 const whereUp = a => {
   if (!a || a.up_in == null) return '';
   const n = a.up_in;
-  if (a.batting_now !== false) return n === 0 ? 'at the plate now' : n === 1 ? 'on deck' : `${n} batters away`;
+  if (a.batting_now !== false) return n === 0 ? (a.verdict === 'last' ? 'at the plate now' : 'at the plate now, and again later') : n === 1 ? 'on deck' : `${n} batters away`;
   return n === 0 ? 'leads off next inning' : `${ordinal(n + 1)} up next inning`;
 };
 const TAG = { take: 'Take', neutral: 'Neutral', risky: 'Risky', dead: 'Hit ✓' };
@@ -220,7 +223,7 @@ function vsArmText(r) {
   return `<span class="whitespace-nowrap"><span class="${cls}">${fmtAvg(a)}</span> vs ${esc(lastName(arm.name))}</span> <span class="m whitespace-nowrap">· ${b.h} for ${b.ab}</span>`;
 }
 const vsArmRow = r => { const b = r.bvp, arm = r.cur_p || r.opp_sp; if (!b || !arm?.name || !b.ab) return null; const a = b.h / b.ab, big = b.pa >= 10, cls = big && a >= .300 ? 'text-take' : big && a <= .150 ? 'text-risky' : ''; return ['Vs pitcher', `<span class="${cls}">${fmtAvg(a)}</span> <span class="m">· ${b.h} for ${b.ab} vs ${esc(lastName(arm.name))}</span>`]; };
-const isHotSpot = (r, meta) => { const inn = inningNum(meta?.inning) ?? inningNum(r.inning); return hotBat(r) && r.hits === 0 && inn != null && inn >= 4 && r.again?.verdict !== 'unlikely'; };
+const isHotSpot = (r, meta) => { const inn = inningNum(meta?.inning) ?? inningNum(r.inning); return hotBat(r) && r.hits === 0 && inn != null && inn >= 4 && r.again?.verdict !== 'unlikely' && r.again?.verdict !== 'last'; };
 const WX = {};                                                    // event -> weather, filled from every data file
 const wxOf = ev => WX[ev] || null;
 const wxRain = w => w && w.risk === 'rain';
@@ -253,7 +256,7 @@ function verdictLive(r, meta) {
   const b = r.bvp, bvpGood = b && b.pa >= 10 && parseFloat(b.avg) >= .300, bvpBad = b && b.pa >= 10 && parseFloat(b.avg) <= .150;
   const penTaxed = r.opp_pen?.health === 'taxed';
   const ag = r.again?.verdict, w = wxOf(r.event) || r.weather, hotAvg = hotBat(r), coldAvg = coldBat(r);
-  if (ag === 'unlikely') return 'risky';                                       // his spot probably doesn't come up again
+  if (ag === 'unlikely' || ag === 'last') return 'risky';                                       // his spot probably doesn't come up again
   if (wxRain(w)) return 'risky';                                               // rain: delay, shortened game, or a voided bet
   if (isHotSpot(r, meta) && now >= -140 && !tough && !wxCold(w)) return 'take';   // high average, hitless, 4th inning or later
   if (inn >= 8 && ag !== 'yes' && ag !== 'likely' && !(penTaxed && r.hits === 0 && strongPre)) return 'risky';
@@ -329,7 +332,7 @@ function parlayLegs() {
   for (const r of d.rows) {
     const meta = d.games?.[r.event]; const inn = inningNum(meta?.inning) ?? inningNum(r.inning);
     if (r.pre == null || r.pre > -150 || r.hits !== 0 || inn == null || inn < 3 || inn > 6) continue;
-    if (r.again?.verdict === 'unlikely' || r.again?.verdict === 'maybe') continue;
+    if (r.again?.verdict === 'unlikely' || r.again?.verdict === 'maybe' || r.again?.verdict === 'last') continue;
     if (wxRain(wxOf(r.event) || r.weather)) continue;                                   // never build a ticket through a rain game
     const v = verdictLive(r, meta); if (v === 'risky' || v === 'dead') continue;
     legs.push({ r, meta, v, m: legModel(r, meta) });
@@ -377,8 +380,7 @@ function tile(r, v, opts = {}) {
   rows.push(['Streak', r.streak == null ? '—' : r.streak >= 2 ? `${r.streak} games${r.streak_hits ? ` <span class="m">· ${r.streak_hits} hits</span>` : ''}` : r.streak === 1 ? `${lastH ? `${lastH} hit${lastH === 1 ? '' : 's'}` : 'Hit'} yesterday` : 'None' + (live && l ? ` <span class="m">· hit in ${l[0]} of last 10</span>` : '')]);
   if (live && r.again && r.again.verdict !== 'unknown') {
     const a = r.again, where = whereUp(a);
-    const cls = a.verdict === 'unlikely' ? 'text-risky' : a.verdict === 'maybe' ? '' : 'text-take';
-    rows.push(['Bats again', `<span class="${cls}">${a.verdict === 'yes' ? 'Yes' : a.verdict === 'likely' ? 'Should' : a.verdict === 'maybe' ? 'Maybe' : 'Probably not'}</span>${where ? ` <span class="m">· ${where}</span>` : ''}`]);
+    rows.push(['Bats again', `<span class="${againCls(a.verdict)}">${againWord(a.verdict)}</span>${where ? ` <span class="m">· ${where}</span>` : ''}`]);
   }
   const arm = r.cur_p || r.opp_sp || (r.sp ? { name: r.sp, ...(r.sp_form || {}) } : null);
   if (arm && arm.name) {
@@ -444,7 +446,7 @@ function renderLive() {
   const gameCell = r => `<div class="whitespace-nowrap">${esc(shortEvent(r.event))}</div><div class="whitespace-nowrap text-muted-foreground">${esc(inningWords(d.games?.[r.event]?.inning || r.inning))}</div>`;
   const armCell = r => { const a = r.cur_p || r.opp_sp; return a?.name ? `<span class="whitespace-nowrap">${esc(lastName(a.name))}${a.rating ? ` ${rateWord(a.rating)}` : ''}</span>` : '—'; };
   const avgCell = r => { const a = avgOf(r), vs = vsArmText(r); if (a == null && !vs) return '—'; return `${a == null ? '' : `<span class="${hotBat(r) ? 'text-take' : coldBat(r) ? 'text-risky' : 'text-foreground'}">${fmtAvg(a)}</span>`}${vs ? `<div>${vs}</div>` : ''}`; };
-  const againCell = r => { const a = r.again; if (!a?.verdict || a.verdict === 'unknown') return '—'; const cls = a.verdict === 'unlikely' ? 'text-risky' : a.verdict === 'maybe' ? 'text-foreground' : 'text-take'; const w = whereUp(a); return `<span class="${cls}">${a.verdict === 'yes' ? 'Yes' : a.verdict === 'likely' ? 'Should' : a.verdict === 'maybe' ? 'Maybe' : 'Probably not'}</span>${w ? ` · ${w}` : ''}`; };
+  const againCell = r => { const a = r.again; if (!a?.verdict || a.verdict === 'unknown') return '—'; const w = whereUp(a); return `<span class="${againCls(a.verdict)}">${againWord(a.verdict)}</span>${w ? ` · ${w}` : ''}`; };
   const todayCell = r => `<span class="text-foreground whitespace-nowrap">${r.hits} for ${r.ab}</span>${paWords(r) ? `<div class="text-muted-foreground">${paWords(r)}</div>` : ''}`;
   const liveCols = [{ label: 'Game', hide: 'hidden lg:table-cell', wrap: true }, { label: 'Today', wrap: true, mobileLabel: 'Today:' }, { label: 'Average', mobileLabel: 'Average', wrap: true }, { label: 'Form', hide: 'hidden xl:table-cell', wrap: true }, { label: 'Pitcher', mobileLabel: 'Facing' }, { label: 'Bats again', hide: 'hidden xl:table-cell' }];
   const liveCells = r => [gameCell(r), todayCell(r), avgCell(r), r.streak >= 3 ? `<span class="text-foreground">${streakText(r)}</span>` : l10Text(r), armCell(r), againCell(r)];
