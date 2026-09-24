@@ -110,13 +110,13 @@ const KEY = {
   ]],
   targets: ['Filters', [
     ['Targets', 'Hitters who were favored before the game (-150 or better), still have no hit, and can be bought at a better price now than pregame.'],
-    ['Hot bats', 'Hitters batting .280 or better this season with no hit yet, in the 4th inning or later, and due to bat again.'],
+    ['Hot bats', 'Hitters batting .270 or better this season with no hit yet, in the 4th inning or later, and due to bat again.'],
     ['Streaks', 'Hitters with a hit in 3 or more games in a row.'],
     ['Everyone', 'Every hitter with a FanDuel line in a live game.'],
     ['.150 vs Skenes · 3 for 20', 'His career average against the pitcher on the mound right now, and the count behind it. It switches to the reliever when one comes in. Colored only once there are 10 or more plate appearances; small counts are mostly luck.'],
   ]],
   avg: ['Average', [
-    [`<span class="text-take">.312</span>`, 'His batting average this season. Green means .280 or better: a hot bat. About 1 in 7 regulars hit that well.'],
+    [`<span class="text-take">.312</span>`, 'His batting average this season. Green means .270 or better: a hot bat. Roughly the top quarter of everyday hitters.'],
     ['.251', 'Around the league average. Most hitters land between .230 and .270.'],
     [`<span class="text-risky">.214</span>`, '.225 or worse. A cold bat, held against him in the verdict.'],
     ['Only 40 at bats', 'Not enough at bats yet for the average to mean much, so it is not used.'],
@@ -207,7 +207,7 @@ const toAmer = d => d >= 2 ? '+' + Math.round((d - 1) * 100) : String(Math.round
 const implied = a => a > 0 ? 100 / (a + 100) : Math.abs(a) / (Math.abs(a) + 100);
 const PA_PREGAME = 4.2;   // typical plate appearances for a starter
 const LEAGUE_AVG = .245, AVG_SHRINK = 300;    // season average regressed toward league (AVG only settles after ~900 AB)
-const HOT_AVG = .280, COLD_AVG = .225, MIN_AB = 100;
+const HOT_AVG = .270, COLD_AVG = .225, MIN_AB = 100;
 const avgOf = r => r.avg != null && r.ab_season >= MIN_AB ? r.avg : null;                      // shown only once it means something
 const trueAvg = r => r.avg == null || !r.ab_season ? LEAGUE_AVG : (r.avg * r.ab_season + LEAGUE_AVG * AVG_SHRINK) / (r.ab_season + AVG_SHRINK);
 const hotBat = r => avgOf(r) != null && avgOf(r) >= HOT_AVG;
