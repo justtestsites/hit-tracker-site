@@ -124,7 +124,8 @@ const KEY = {
   ]],
   move: ['Line movement', [
     ['Opened', 'The first price FanDuel posted for him.'],
-    ['Now', 'The current price.'],
+    ['Now', 'The current price, for games that have not started.'],
+    ['Closed', 'The last price before first pitch. Line movement is about the pregame market, so in-game prices are not shown here. They are on the Live tab.'],
     ['Change', 'How far the price has moved since it opened. More favored means the book likes his chances more than it did.'],
     ['Trend', 'Each step the price took during the day. Shown once there are at least 3 prices.'],
     ['More favored only', 'Just the hitters whose price got more favored since it opened.'],
@@ -420,19 +421,31 @@ function moveRow(m) {
     <td class="${tdc} hidden md:table-cell text-right text-muted-foreground whitespace-nowrap">${last}</td>
   </tr>`;
 }
-function moveTable(rows) {
-  return `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="border-b border-border text-xs text-muted-foreground"><th class="whitespace-nowrap px-4 py-2 text-left font-medium">Player</th><th class="whitespace-nowrap px-4 py-2 text-right font-medium hidden sm:table-cell">Opened</th><th class="whitespace-nowrap px-4 py-2 text-right font-medium">Now</th><th class="whitespace-nowrap px-4 py-2 text-left font-medium">Change</th><th class="whitespace-nowrap px-4 py-2 text-left font-medium hidden sm:table-cell">Trend</th><th class="whitespace-nowrap px-4 py-2 text-right font-medium hidden md:table-cell">Last move</th></tr></thead><tbody>${rows.map(moveRow).join('')}</tbody></table></div>`;
+function moveTable(rows, closed = false) {
+  return `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="border-b border-border text-xs text-muted-foreground"><th class="whitespace-nowrap px-4 py-2 text-left font-medium">Player</th><th class="whitespace-nowrap px-4 py-2 text-right font-medium hidden sm:table-cell">Opened</th><th class="whitespace-nowrap px-4 py-2 text-right font-medium">${closed ? 'Closed' : 'Now'}</th><th class="whitespace-nowrap px-4 py-2 text-left font-medium">Change</th><th class="whitespace-nowrap px-4 py-2 text-left font-medium hidden sm:table-cell">Trend</th><th class="whitespace-nowrap px-4 py-2 text-right font-medium hidden md:table-cell">Last move</th></tr></thead><tbody>${rows.map(moveRow).join('')}</tbody></table></div>`;
+}
+function pregameRows(rows) {
+  // Line movement is the pregame market: once a game starts the line is closed at its last pregame price.
+  const now = Date.now();
+  return rows.map(m => {
+    if (m.closed != null) return m;                                   // tracker already did this
+    if (!m.start || new Date(m.start) > now) return { ...m, closed: false };
+    const t0 = new Date(m.start).getTime();
+    const pre = (m.points || []).filter(p => new Date(p[0]).getTime() < t0);
+    const pts = pre.length ? pre : (m.points || []).slice(0, 1);
+    return { ...m, closed: true, points: pts, now: pts[pts.length - 1][1] };
+  });
 }
 function renderMove() {
-  const d = DATA.move, q = ($('#move-q').value || '').toLowerCase(), f = F.move, rows = d?.rows || [];
+  const d = DATA.move, q = ($('#move-q').value || '').toLowerCase(), f = F.move, rows = pregameRows(d?.rows || []);
   $('#n-move').textContent = rows.filter(m => m.now < m.open).length;
   if (!rows.length) { $('#move-top').innerHTML = ''; $('#move-games').innerHTML = empty('No lines captured yet.'); return; }
   const liveEv = new Set((DATA.live?.rows || []).map(r => r.event)), now = Date.now(), pregame = m => !m.start || new Date(m.start) > now;
   const movers = rows.filter(m => pregame(m) && m.now < m.open).sort((a, b) => (a.now - a.open) - (b.now - b.open)).slice(0, 10);
-  $('#move-top').innerHTML = `<div class="card"><div class="px-5 pt-4 pb-3"><div class="text-[15px] font-semibold">Getting more favored</div><div class="text-sm text-muted-foreground">Pregame lines that have gotten more favored since they opened. Once a game starts, its prices move to the Live tab.</div></div><div class="border-t border-border">${movers.length ? moveTable(movers) : empty('No pregame lines have gotten more favored yet today.')}</div></div>`;
+  $('#move-top').innerHTML = `<div class="card"><div class="px-5 pt-4 pb-3"><div class="text-[15px] font-semibold">Getting more favored</div><div class="text-sm text-muted-foreground">Pregame lines that have gotten more favored since they opened. Once a game starts its line is closed and in-game prices live on the Live tab.</div></div><div class="border-t border-border">${movers.length ? moveTable(movers) : empty('No pregame lines have gotten more favored yet today.')}</div></div>`;
   const keep = rows.filter(m => matchQ(m, q) && (f === 'all' || (f === 'live' && liveEv.has(m.event)) || (f === 'movers' && m.now < m.open)));
   const games = [...groupBy(keep, m => m.event)].sort((a, b) => (a[1][0].start || '').localeCompare(b[1][0].start || ''));
-  $('#move-games').innerHTML = games.map(([ev, ms]) => { ms.sort((a, b) => (a.now - a.open) - (b.now - b.open)); return `<div>${sectionHead(ev, DATA.live?.games?.[ev], ms[0].start)}<div class="card">${moveTable(ms)}</div></div>`; }).join('') || empty('Nothing matches.');
+  $('#move-games').innerHTML = games.map(([ev, ms]) => { ms.sort((a, b) => (a.now - a.open) - (b.now - b.open)); return `<div>${sectionHead(ev, DATA.live?.games?.[ev], ms[0].start)}<div class="card">${moveTable(ms, ms[0].closed)}</div></div>`; }).join('') || empty('Nothing matches.');
   const rep = DATA.report;
   if (rep?.rows?.length) {
     const moved = rep.rows.filter(r => r.move != null && Math.abs(r.move) >= 20).sort((a, b) => Math.abs(b.move) - Math.abs(a.move)).slice(0, 20);
