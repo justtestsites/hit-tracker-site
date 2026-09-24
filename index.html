@@ -98,6 +98,7 @@ const KEY = {
     [`<span class="text-take">Yes</span>`, 'His spot in the order is coming up again for sure.'],
     [`<span class="text-take">Should</span>`, 'He most likely gets another at bat.'],
     ['Maybe', 'It is close. He might not get another at bat.'],
+    ['Leads off next inning', 'The other team is batting right now. He is first up when his team comes back in.'],
     [`<span class="text-risky">Probably not</span>`, 'The game will likely end before his spot comes up again.'],
   ]],
   odds: ['Odds', [
@@ -121,7 +122,7 @@ const KEY = {
     ['Only 40 at bats', 'Not enough at bats yet for the average to mean much, so it is not used.'],
   ]],
   weather: ['Weather', [
-    [`<span class="text-risky">Rain</span>`, 'Rain at the park, or a 50%+ chance around first pitch. Delays, a shortened game, or a voided bet. Marked Risky and kept out of parlays.'],
+    [`<span class="text-risky">Rain</span>`, 'Rain at the park, or a 50%+ chance around first pitch. Wet ball means more walks (which do not count as hits), plus delays, a shortened game, or a voided bet. Marked Risky and kept out of parlays.'],
     [`<span class="text-risky">Rain possible</span>`, 'A 30 to 49% chance of rain around game time. Treated the same way: Risky.'],
     ['Some rain chance', 'A 15 to 29% chance. Shown so you know, but it does not change the verdict.'],
     ['Cold', '50° or colder. The ball does not carry and batting averages drop, so it blocks a Take.'],
@@ -188,6 +189,13 @@ const inningWords = t => { if (!t) return ''; return t.replace(/^(Top|Bottom|Mid
 const inningNum = t => { const m = /(\d+)/.exec(t || ''); return m ? +m[1] : null; };
 const l10n = r => { const m = /^(\d+)\/(\d+)/.exec(r.last10 || ''); return m ? [+m[1], +m[2]] : null; };
 const AGAIN = { yes: 'Will bat again', likely: 'Should bat again', maybe: 'Might not bat again', unlikely: 'Probably done for the day', unknown: '' };
+// where his spot is. When the other team is batting, "0" means he leads off when his team comes up.
+const whereUp = a => {
+  if (!a || a.up_in == null) return '';
+  const n = a.up_in;
+  if (a.batting_now !== false) return n === 0 ? 'at the plate now' : n === 1 ? 'on deck' : `${n} batters away`;
+  return n === 0 ? 'leads off next inning' : `${ordinal(n + 1)} up next inning`;
+};
 const TAG = { take: 'Take', neutral: 'Neutral', risky: 'Risky', dead: 'Hit ✓' };
 const lastName = n => String(n || '').split(' ').slice(-1)[0];
 const groupBy = (xs, k) => { const m = new Map(); for (const x of xs) { const kk = k(x); (m.get(kk) || m.set(kk, []).get(kk)).push(x); } return m; };
@@ -355,7 +363,7 @@ function tile(r, v, opts = {}) {
   if (r.avg != null) { const a = avgOf(r); rows.push(['Average', a == null ? `${fmtAvg(r.avg)} <span class="m">· only ${r.ab_season} at bats</span>` : `<span class="${hotBat(r) ? 'text-take' : coldBat(r) ? 'text-risky' : ''}">${fmtAvg(a)}</span>${hotBat(r) ? ' <span class="m">· hot bat</span>' : ''}`]); }
   rows.push(['Streak', r.streak == null ? '—' : r.streak >= 2 ? `${r.streak} games${r.streak_hits ? ` <span class="m">· ${r.streak_hits} hits</span>` : ''}` : r.streak === 1 ? `${lastH ? `${lastH} hit${lastH === 1 ? '' : 's'}` : 'Hit'} yesterday` : 'None' + (live && l ? ` <span class="m">· hit in ${l[0]} of last 10</span>` : '')]);
   if (live && r.again && r.again.verdict !== 'unknown') {
-    const a = r.again, where = a.up_in == null ? '' : a.up_in === 0 ? 'at the plate now' : a.up_in === 1 ? 'on deck' : `${a.up_in} batters away`;
+    const a = r.again, where = whereUp(a);
     const cls = a.verdict === 'unlikely' ? 'text-risky' : a.verdict === 'maybe' ? '' : 'text-take';
     rows.push(['Bats again', `<span class="${cls}">${a.verdict === 'yes' ? 'Yes' : a.verdict === 'likely' ? 'Should' : a.verdict === 'maybe' ? 'Maybe' : 'Probably not'}</span>${where ? ` <span class="m">· ${where}</span>` : ''}`]);
   }
@@ -535,7 +543,7 @@ function renderParlay() {
   const sameGame = chosen.length - new Set(chosen.map(x => x.r.event)).size;
   const legLine = x => {
     const arm = x.r.cur_p || x.r.opp_sp, a = x.r.again;
-    const where = a?.up_in == null ? '—' : a.up_in === 0 ? 'at the plate' : a.up_in === 1 ? 'on deck' : `${a.up_in} batters away`;
+    const where = whereUp(a) || '—';
     return [
       `<span class="text-foreground font-medium">${Math.round(x.m.p * 100)}% to get a hit</span>`,
       `Bats again: ${where}`,
