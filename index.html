@@ -112,6 +112,33 @@
   .oddsbox { display:flex; flex-direction:column; align-items:stretch; }
 
   .empty { color:var(--text3); padding:40px 10px; text-align:center; font-weight:500; }
+  .spark { width:96px; height:28px; display:block; }
+  .spark path { fill:none; stroke-width:2; stroke-linejoin:round; stroke-linecap:round; }
+  .spark .up { stroke:var(--green); } .spark .down { stroke:var(--red); } .spark .flat { stroke:var(--text3); }
+  .mv { display:grid; grid-template-columns:auto 1fr auto; grid-template-areas:"tm who odds" "tm rng rng"; align-items:center; column-gap:12px; row-gap:4px; padding:10px 14px; border-top:1px solid var(--line); }
+  .mv:first-child { border-top:0; }
+  .mv .tm { grid-area:tm; align-self:start; margin-top:4px; } .mv .who { grid-area:who; } .mv .od { grid-area:odds; }
+  .mv .rng { grid-area:rng; color:var(--text3); font-size:11.5px; display:flex; align-items:center; gap:10px; min-width:0; }
+  .mv .rng span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .mv .oddsline { text-align:right; font-weight:800; font-size:15px; white-space:nowrap; }
+  .mv .oddsline small { color:var(--text3); font-weight:600; font-size:12px; }
+  .mv .delta { font-size:12px; font-weight:700; margin-top:2px; text-align:right; }
+  .delta.up { color:var(--green); } .delta.down { color:var(--red); } .delta.flat { color:var(--text3); }
+  .arm { padding:12px 14px; border-top:1px solid var(--line); }
+  .arm:first-child { border-top:0; }
+  .arm .hd { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .arm .nm { font-weight:700; font-size:15px; }
+  .arm .nm small { color:var(--text3); font-weight:600; font-size:12px; margin-left:6px; }
+  .arm .stats { color:var(--text2); font-size:13px; margin-top:4px; }
+  .arm .stats b { color:var(--text); }
+  .arm .pen { margin-top:8px; padding-top:8px; border-top:1px dashed var(--line); color:var(--text3); font-size:12.5px; line-height:1.5; }
+  .arm .pen b { color:var(--text2); }
+  .badge { font-weight:800; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; padding:3px 8px; border-radius:6px; }
+  .badge.hittable, .badge.fresh { color:var(--green); background:var(--green-bg); }
+  .badge.tough, .badge.taxed { color:var(--orange); background:var(--orange-bg); }
+  .badge.neutral, .badge.ok { color:var(--text3); background:var(--white-bg); }
+  .sp .bvp { color:var(--text2); } .sp .bvp.good { color:var(--green); font-weight:700; } .sp .bvp.bad { color:var(--orange); font-weight:700; }
+  .sp .pen { color:var(--text3); } .sp .pen.taxed { color:var(--green); font-weight:700; }
   .kicker { color:var(--text3); font-size:13.5px; margin:0 0 14px; }
   .h3 { margin:22px 0 10px; font-size:13px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--text3); }
   .legend { display:flex; gap:16px; flex-wrap:wrap; color:var(--text3); font-size:12.5px; margin-top:20px; }
@@ -143,7 +170,8 @@
   <div class="tabs">
     <button data-tab="live" class="on">Live <span class="n" id="n-live">–</span></button>
     <button data-tab="board">Today's board <span class="n" id="n-board">–</span></button>
-    <button data-tab="report">Line movement <span class="n" id="n-rep">–</span></button>
+    <button data-tab="move">Line movement <span class="n" id="n-move">–</span></button>
+    <button data-tab="pitch">Pitchers <span class="n" id="n-pitch">–</span></button>
   </div>
 </div></header>
 
@@ -169,14 +197,21 @@
     <div class="grid" id="board-games"></div>
   </section>
 
-  <section id="report">
-    <p class="kicker" id="rep-meta">No overnight report yet — it's generated at 11 AM after the morning snapshot.</p>
-    <div class="h3">Favored board · -250 or better</div>
-    <div class="grid" id="rep-fav"></div>
-    <div class="h3">Biggest overnight moves</div>
-    <div class="grid" id="rep-moves"></div>
-    <div class="h3">New / dropped</div>
-    <div class="card" id="rep-misc" style="padding:12px 14px;color:var(--text2)"></div>
+  <section id="move">
+    <div class="bar">
+      <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="move-q" type="search" placeholder="Player or team"></div>
+      <div class="seg" id="move-seg"><button data-f="all" class="on">All games</button><button data-f="live">Live now</button><button data-f="movers">Movers only</button></div>
+    </div>
+    <div id="move-top"></div>
+    <div class="grid" id="move-games"></div>
+    <div class="legend"><span><i style="background:var(--green)"></i>Line got more favored since it opened</span><span><i style="background:var(--red)"></i>Line got less favored</span><span>Chart = every price change we've seen for that line, from opening to now</span></div>
+    <div id="rep-block"></div>
+  </section>
+
+  <section id="pitch">
+    <p class="kicker" id="pitch-meta"></p>
+    <div class="grid" id="pitch-games"></div>
+    <div class="legend"><span><i style="background:var(--green)"></i>Hittable arm / fresh pen</span><span><i style="background:var(--orange)"></i>Tough arm / taxed pen</span><span>Tired = pitched both of the last two days, or 30+ pitches yesterday</span></div>
   </section>
 </main>
 
@@ -194,7 +229,7 @@ const inningWords = t => { if (!t) return ''; return t.replace(/^(Top|Bottom|Mid
 const inningNum = t => { const m = /(\d+)/.exec(t || ''); return m ? +m[1] : null; };
 const l10n = r => { const m = /^(\d+)\/(\d+)/.exec(r.last10 || ''); return m ? [+m[1], +m[2]] : null; };
 let DATA = { live: null, report: null, board: null };
-const F = { live: 'targets', board: 'all' };
+const F = { live: 'targets', board: 'all', move: 'all' };
 async function get(p) { try { const r = await fetch(p + '?t=' + Date.now(), { cache: 'no-store' }); return r.ok ? await r.json() : null; } catch { return null; } }
 
 /* ---------- verdicts ---------- */
@@ -206,9 +241,12 @@ function verdictLive(r, meta) {
   const strongPre = pre != null && pre <= -180, hot = (r.streak || 0) >= 5, cold = l10r != null && l10r <= 0.4 && !(r.streak >= 3);
   const arm = r.cur_p || r.opp_sp;                                // whoever the hitter faces right now
   const hittable = arm?.rating === 'hittable', tough = arm?.rating === 'tough';
-  if (inn >= 8) return 'risky';                                   // 1 AB left at best
+  const b = r.bvp, bvpGood = b && b.pa >= 10 && parseFloat(b.avg) >= .300, bvpBad = b && b.pa >= 10 && parseFloat(b.avg) <= .150;
+  const penTaxed = r.opp_pen?.health === 'taxed';
+  if (inn >= 8 && !(penTaxed && r.hits === 0 && strongPre)) return 'risky';   // 1 AB left at best — unless a gassed pen is coming
+  if (bvpBad && r.hits === 0 && now > -130) return 'risky';
   if (r.hits === 0 && now >= 150) return 'risky';                 // book says it's unlikely now
-  if (strongPre && r.hits === 0 && now >= (hittable ? -135 : -115) && inn <= 6 && !cold && !tough) return 'take';
+  if (strongPre && r.hits === 0 && now >= (hittable || bvpGood || penTaxed ? -135 : -115) && inn <= 7 && !cold && !tough) return 'take';
   if (hot && r.hits === 0 && inn <= 5 && now >= -140 && !tough) return 'take';
   if (cold && now > -120) return 'risky';
   if (tough && r.hits === 0 && now > -120) return 'risky';
@@ -261,11 +299,20 @@ function spHtml(r) {
     const tonight = t.ip != null ? ` · tonight ${t.h ?? 0} H / ${t.ip} IP${t.pitches ? `, ${t.pitches} pitches` : ''}` : '';
     const who = r.sp_out ? `<span class="out">NOW</span> <b>${esc(lastName(cp.name))}</b> (relief)` : `vs <b>${esc(lastName(cp.name))}</b>`;
     const started = r.sp_out && sp?.name ? ` · started: ${esc(lastName(sp.name))}` : '';
-    return `<span class="sp">${cp.rating ? `<span class="rt ${cp.rating}">${cp.rating}</span>` : ''}${who} · ${armStats(cp)}${tonight}${started}</span>`;
+    return `<span class="sp">${cp.rating ? `<span class="rt ${cp.rating}">${cp.rating}</span>` : ''}${who} · ${armStats(cp)}${tonight}${started}${bvpHtml(r)}${penHtml(r)}</span>`;
   }
   if (!sp || !sp.name) return '';
   const st = armStats(sp);
-  return `<span class="sp">${sp.rating ? `<span class="rt ${sp.rating}">${sp.rating}</span>` : ''}vs <b>${esc(lastName(sp.name))}</b>${st ? ' · ' + st : ''}</span>`;
+  return `<span class="sp">${sp.rating ? `<span class="rt ${sp.rating}">${sp.rating}</span>` : ''}vs <b>${esc(lastName(sp.name))}</b>${st ? ' · ' + st : ''}${bvpHtml(r)}${penHtml(r)}</span>`;
+}
+function bvpHtml(r) {
+  const b = r.bvp; if (!b || !b.ab) return '';
+  const avg = parseFloat(b.avg), cls = b.pa >= 10 ? (avg >= .300 ? 'good' : avg <= .150 ? 'bad' : '') : '';
+  return ` · <span class="bvp ${cls}">career vs him ${b.h}-for-${b.ab}${b.hr ? `, ${b.hr} HR` : ''}${b.pa < 10 ? ' (small sample)' : ''}</span>`;
+}
+function penHtml(r) {
+  const p = r.opp_pen; if (!p) return '';
+  return ` · <span class="pen ${p.health}">their pen ${p.health}${p.tired?.length ? ` (${p.tired.length} tired)` : ''}</span>`;
 }
 function playerRow(r, v, opts = {}) {
   const today = todayHtml(r);
@@ -335,36 +382,69 @@ function renderBoard() {
   const games = [...groupBy(keep, x => x.r.event)].sort((a, b) => (a[1][0].r.start || '').localeCompare(b[1][0].r.start || ''));
   $('#board-games').innerHTML = games.map(([ev, xs]) => { xs.sort((a, b) => a.r.odds - b.r.odds); return card(ev, xs.map(({ r, v }) => playerRow(r, v)).join(''), null, xs[0].r.start); }).join('') || '<div class="empty">Nothing matches.</div>';
 }
-function renderReport() {
-  const d = DATA.report; $('#n-rep').textContent = d?.rows?.length ?? 0;
-  if (!d) return;
-  const fmt = s => (s || '').slice(0, 16).replace('T', ' ');
-  $('#rep-meta').textContent = `Games of ${d.date} · lines at ${fmt(d.baseline_taken)} vs ${fmt(d.now_taken)}. "Was" shows last night's price.`;
-  const rows = d.rows || [], cut = d.favored_cutoff ?? -250;
-  const fav = rows.filter(r => r.odds <= cut).sort((a, b) => a.odds - b.odds);
-  $('#rep-fav').innerHTML = [...groupBy(fav, r => r.event)].map(([ev, rs]) => card(ev, rs.map(r => playerRow(r, verdictPre(r), { pre: r.prev, sp: true })).join(''), null, rs[0].start)).join('') || '<div class="empty">No one at ' + cut + ' or better.</div>';
-  const moved = rows.filter(r => r.move != null && Math.abs(r.move) >= 20).sort((a, b) => Math.abs(b.move) - Math.abs(a.move)).slice(0, 24);
-  $('#rep-moves').innerHTML = moved.length ? `<div class="card">${moved.map(r => playerRow(r, verdictPre(r), { pre: r.prev })).join('')}</div>` : '<div class="empty">No moves of 20+ points overnight.</div>';
-  const nw = rows.filter(r => r.prev == null), dr = d.dropped || [];
-  const list = (t, xs, f) => xs.length ? `<p style="margin:4px 0"><b>${t}:</b> ${xs.map(f).join(', ')}</p>` : '';
-  $('#rep-misc').innerHTML = (list('New', nw, r => `${esc(r.player)} (${odds(r.odds)})`) + list('Dropped', dr, r => `${esc(r.player)} (was ${odds(r.odds)})`)) || 'Nothing new or dropped.';
+function spark(points) {
+  const ys = points.map(p => p[1]); if (ys.length < 2) return '<svg class="spark"></svg>';
+  const lo = Math.min(...ys), hi = Math.max(...ys), span = Math.max(1, hi - lo);
+  const W = 96, H = 28, pad = 3;
+  // y axis: more favored (more negative) = higher on the chart
+  const pts = ys.map((y, i) => [pad + i * (W - 2 * pad) / (ys.length - 1), pad + ((y - lo) / span) * (H - 2 * pad)]);
+  const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  const cls = ys[ys.length - 1] < ys[0] ? 'up' : ys[ys.length - 1] > ys[0] ? 'down' : 'flat';
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}"><path class="${cls}" d="${d}"/></svg>`;
 }
-
+function moveRow(m) {
+  const d = m.now - m.open, cls = d < 0 ? 'up' : d > 0 ? 'down' : 'flat';
+  const rng = m.min !== m.max ? `range ${odds(m.min)} to ${odds(m.max)} · ${m.points.length - 1} change${m.points.length - 1 === 1 ? '' : 's'}` : 'no movement yet';
+  return `<div class="mv"><div class="tm">${esc(m.team || '—')}</div>
+    <div class="who"><div class="name">${esc(m.player)}${m.streak >= 3 ? ` <span class="streak" style="font-size:12px">🔥 ${m.streak}</span>` : ''}</div></div>
+    <div class="od"><div class="oddsline"><small>${odds(m.open)} →</small> ${odds(m.now)}</div><div class="delta ${cls}">${d ? (d < 0 ? 'more favored ' : 'less favored ') + (d > 0 ? '+' : '') + d : 'unchanged'}</div></div>
+    <div class="rng">${spark(m.points)}<span>${rng}</span></div>
+  </div>`;
+}
+function renderMove() {
+  const d = DATA.move, q = ($('#move-q').value || '').toLowerCase(), f = F.move;
+  const rows = d?.rows || []; $('#n-move').textContent = rows.filter(m => m.now !== m.open).length;
+  if (!rows.length) { $('#move-top').innerHTML = ''; $('#move-games').innerHTML = '<div class="empty">No lines captured yet.</div>'; return; }
+  const liveEv = new Set((DATA.live?.rows || []).map(r => r.event));
+  const movers = rows.filter(m => m.now !== m.open).sort((a, b) => Math.abs(b.now - b.open) - Math.abs(a.now - a.open)).slice(0, 8);
+  $('#move-top').innerHTML = movers.length ? `<div class="picks" style="border-color:var(--line2);background:var(--panel)"><h2 style="color:var(--text2)">Biggest moves today</h2><p>Since the line first appeared on the board.</p><div class="card">${movers.map(moveRow).join('')}</div></div>` : '';
+  const keep = rows.filter(m => matchQ(m, q) && (f === 'all' || (f === 'live' && liveEv.has(m.event)) || (f === 'movers' && m.now !== m.open)));
+  const games = [...groupBy(keep, m => m.event)].sort((a, b) => (a[1][0].start || '').localeCompare(b[1][0].start || ''));
+  $('#move-games').innerHTML = games.map(([ev, ms]) => { ms.sort((a, b) => (a.now - a.open) - (b.now - b.open)); return card(ev, ms.map(moveRow).join(''), DATA.live?.games?.[ev], ms[0].start); }).join('') || '<div class="empty">Nothing matches.</div>';
+  renderReportBlock();
+}
+function renderReportBlock() {
+  const d = DATA.report; const el = $('#rep-block');
+  if (!d || !d.rows?.length) { el.innerHTML = ''; return; }
+  const fmt = s => (s || '').slice(11, 16);
+  const rows = d.rows, moved = rows.filter(r => r.move != null && Math.abs(r.move) >= 20).sort((a, b) => Math.abs(b.move) - Math.abs(a.move)).slice(0, 20);
+  el.innerHTML = `<div class="h3">Overnight (11 PM → 11 AM) · ${d.date}</div>` + (moved.length ? `<div class="card">${moved.map(r => playerRow(r, verdictPre(r), { pre: r.prev })).join('')}</div>` : '<div class="empty">No overnight moves of 20+ points.</div>');
+}
+function armBlock(label, p, pen, team) {
+  const st = p ? `<div class="stats"><b>${p.h9 ?? '?'}</b> H/9 · <b>${p.k9 ?? '?'}</b> K/9 · <b>${p.baa ? String(p.baa).replace(/^0/, '') : '?'}</b> BAA · ERA ${p.era ?? '?'}${p.last3?.length ? ` · last 3: ${p.last3.join(', ')}` : ''}${p.ip != null && p.ip < 40 ? ' · few innings' : ''}</div>` : '<div class="stats">No probable starter listed yet.</div>';
+  const penHtml = pen ? `<div class="pen"><b>Bullpen</b> <span class="badge ${pen.health}">${pen.health}</span> · yesterday: ${pen.yesterday.length ? pen.yesterday.slice(0, 5).map(x => `${lastName(x.name)} ${x.pitches}`).join(', ') : 'none used'}${pen.tired.length ? `<br><b>Tired:</b> ${pen.tired.map(lastName).join(', ')}` : ''}</div>` : '<div class="pen">Bullpen usage not available yet.</div>';
+  return `<div class="arm"><div class="hd"><div class="nm">${p ? esc(p.name) : 'TBD'}<small>${esc(team || '')} · ${label}</small></div>${p?.rating ? `<span class="badge ${p.rating}">${p.rating}</span>` : ''}</div>${st}${penHtml}</div>`;
+}
+function renderPitch() {
+  const d = DATA.pitch; const games = d?.games || []; $('#n-pitch').textContent = games.length;
+  $('#pitch-meta').textContent = games.length ? `Starters and bullpen state for every game on the board. Bullpen = who threw in the last two days.` : 'No pitcher data yet.';
+  $('#pitch-games').innerHTML = games.map(g => card(g.event, armBlock('away starter', g.away_sp, g.away_pen, g.away) + armBlock('home starter', g.home_sp, g.home_pen, g.home), DATA.live?.games?.[g.event], g.start)).join('');
+}
 /* ---------- boot ---------- */
 async function refresh() {
-  [DATA.live, DATA.report, DATA.board] = await Promise.all([get('data/live.json'), get('data/report.json'), get('data/board.json')]);
+  [DATA.live, DATA.report, DATA.board, DATA.move, DATA.pitch] = await Promise.all([get('data/live.json'), get('data/report.json'), get('data/board.json'), get('data/movement.json'), get('data/pitchers.json')]);
   const t = DATA.live?.generated || DATA.board?.generated;
   const stale = t && (Date.now() - new Date(t)) > 45 * 60000;
   $('#status').innerHTML = t ? `<span class="dot ${stale ? 'stale' : ''}"></span><span class="lbl">Updated</span><b>${ago(t)}</b>` : '<span class="dot stale"></span>no data yet';
-  renderLive(); renderBoard(); renderReport();
+  renderLive(); renderBoard(); renderMove(); renderPitch();
 }
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
   document.querySelectorAll('main section').forEach(s => s.classList.toggle('on', s.id === b.dataset.tab));
 });
-for (const [id, key, fn] of [['#live-seg', 'live', renderLive], ['#board-seg', 'board', renderBoard]])
+for (const [id, key, fn] of [['#live-seg', 'live', renderLive], ['#board-seg', 'board', renderBoard], ['#move-seg', 'move', renderMove]])
   document.querySelectorAll(id + ' button').forEach(b => b.onclick = () => { document.querySelectorAll(id + ' button').forEach(x => x.classList.toggle('on', x === b)); F[key] = b.dataset.f; fn(); });
-$('#live-q').oninput = renderLive; $('#board-q').oninput = renderBoard;
+$('#live-q').oninput = renderLive; $('#board-q').oninput = renderBoard; $('#move-q').oninput = renderMove;
 refresh(); setInterval(refresh, 60000);
 </script>
 </body>
