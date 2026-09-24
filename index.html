@@ -113,7 +113,7 @@ const KEY = {
     ['Hot bats', 'Hitters batting .280 or better this season with no hit yet, in the 4th inning or later, and due to bat again.'],
     ['Streaks', 'Hitters with a hit in 3 or more games in a row.'],
     ['Everyone', 'Every hitter with a FanDuel line in a live game.'],
-    ['3 for 20 against him', 'How the hitter has done against this pitcher in his career.'],
+    ['.150 vs Skenes · 3 for 20', 'His career average against the pitcher on the mound right now, and the count behind it. It switches to the reliever when one comes in. Colored only once there are 10 or more plate appearances; small counts are mostly luck.'],
   ]],
   avg: ['Average', [
     [`<span class="text-take">.312</span>`, 'His batting average this season. Green means .280 or better: a hot bat. About 1 in 7 regulars hit that well.'],
@@ -212,6 +212,12 @@ const trueAvg = r => r.avg == null || !r.ab_season ? LEAGUE_AVG : (r.avg * r.ab_
 const hotBat = r => avgOf(r) != null && avgOf(r) >= HOT_AVG;
 const coldBat = r => avgOf(r) != null && avgOf(r) <= COLD_AVG;
 const fmtAvg = a => a == null ? '—' : a.toFixed(3).replace(/^0/, '');
+// average against the pitcher he is facing right now (career). Colored only once there are 10+ plate appearances.
+function vsArmText(r) {
+  const b = r.bvp, arm = r.cur_p || r.opp_sp; if (!b || !arm?.name || !b.ab) return '';
+  const a = b.h / b.ab, big = b.pa >= 10, cls = big && a >= .300 ? 'text-take' : big && a <= .150 ? 'text-risky' : 'text-foreground';
+  return `<span class="whitespace-nowrap"><span class="${cls}">${fmtAvg(a)}</span> vs ${esc(lastName(arm.name))}</span> <span class="m whitespace-nowrap">· ${b.h} for ${b.ab}</span>`;
+}
 const isHotSpot = (r, meta) => { const inn = inningNum(meta?.inning) ?? inningNum(r.inning); return hotBat(r) && r.hits === 0 && inn != null && inn >= 4 && r.again?.verdict !== 'unlikely'; };
 const WX = {};                                                    // event -> weather, filled from every data file
 const wxOf = ev => WX[ev] || null;
@@ -360,7 +366,7 @@ function tile(r, v, opts = {}) {
   const l = l10n(r);
   if (!live) rows.push(['Last 10', l ? `Hit in ${l[0]} of ${l[1]}${dots(r)}` : '—']);
   const lastH = r.last10_hits?.length ? r.last10_hits[r.last10_hits.length - 1] : null;
-  if (r.avg != null) { const a = avgOf(r); rows.push(['Average', a == null ? `${fmtAvg(r.avg)} <span class="m">· only ${r.ab_season} at bats</span>` : `<span class="${hotBat(r) ? 'text-take' : coldBat(r) ? 'text-risky' : ''}">${fmtAvg(a)}</span>${hotBat(r) ? ' <span class="m">· hot bat</span>' : ''}`]); }
+  { const a = avgOf(r), vs = vsArmText(r); const main = r.avg == null ? '' : a == null ? `${fmtAvg(r.avg)} <span class="m">· only ${r.ab_season} at bats</span>` : `<span class="${hotBat(r) ? 'text-take' : coldBat(r) ? 'text-risky' : ''}">${fmtAvg(a)}</span>${hotBat(r) ? ' <span class="m">· hot bat</span>' : ''}`; if (main || vs) rows.push(['Average', `${main}${vs ? `<div>${vs}</div>` : ''}`]); }
   rows.push(['Streak', r.streak == null ? '—' : r.streak >= 2 ? `${r.streak} games${r.streak_hits ? ` <span class="m">· ${r.streak_hits} hits</span>` : ''}` : r.streak === 1 ? `${lastH ? `${lastH} hit${lastH === 1 ? '' : 's'}` : 'Hit'} yesterday` : 'None' + (live && l ? ` <span class="m">· hit in ${l[0]} of last 10</span>` : '')]);
   if (live && r.again && r.again.verdict !== 'unknown') {
     const a = r.again, where = whereUp(a);
@@ -372,7 +378,6 @@ function tile(r, v, opts = {}) {
     const t = r.cur_p?.tonight || {}, notes = [];
     if (r.sp_out) notes.push('Reliever');
     if (!r.sp_out && t.pitches >= 85) notes.push('Likely out soon');
-    if (r.bvp && r.bvp.pa >= 10) notes.push(`${r.bvp.h} for ${r.bvp.ab} against him`);
     rows.push([r.sp_out ? 'Facing now' : 'Pitcher', `<span class="whitespace-nowrap">${esc(lastName(arm.name))}${arm.rating ? ` · ${rateWord(arm.rating)}` : ''}</span>${notes.map(n => `<div class="m">${n}</div>`).join('')}`]);
   }
   if (r.opp_pen) { const p = r.opp_pen, dn = p.top_down || []; rows.push(['Bullpen', `${rateWord(p.health, 'pen')}${dn.length ? `<div class="m">${dn.map(lastName).join(', ')} likely out</div>` : ''}`]); }
@@ -430,11 +435,11 @@ function renderLive() {
     $('#live-picks').innerHTML = ''; $('#live-games').innerHTML = ipHtml + empty(`${ip.length ? '' : 'No games in progress right now. '}${nxt}`); $('#live-note').textContent = ''; return; }
   const withV = d.rows.map(r => ({ r, v: verdictLive(r, d.games?.[r.event]) }));
   const gameCell = r => `<div class="whitespace-nowrap">${esc(shortEvent(r.event))}</div><div class="whitespace-nowrap text-muted-foreground">${esc(inningWords(d.games?.[r.event]?.inning || r.inning))}</div>`;
-  const armCell = r => { const a = r.cur_p || r.opp_sp; return a?.name ? `<span class="whitespace-nowrap">${esc(lastName(a.name))}${a.rating ? ` ${rateWord(a.rating)}` : ''}</span>${r.bvp && r.bvp.pa >= 10 ? `<div class="whitespace-nowrap text-muted-foreground">${r.bvp.h} for ${r.bvp.ab} against him</div>` : ''}` : '—'; };
-  const avgCell = r => { const a = avgOf(r); return a == null ? '—' : `<span class="${hotBat(r) ? 'text-take' : coldBat(r) ? 'text-risky' : 'text-foreground'}">${fmtAvg(a)}</span>`; };
+  const armCell = r => { const a = r.cur_p || r.opp_sp; return a?.name ? `<span class="whitespace-nowrap">${esc(lastName(a.name))}${a.rating ? ` ${rateWord(a.rating)}` : ''}</span>` : '—'; };
+  const avgCell = r => { const a = avgOf(r), vs = vsArmText(r); if (a == null && !vs) return '—'; return `${a == null ? '' : `<span class="${hotBat(r) ? 'text-take' : coldBat(r) ? 'text-risky' : 'text-foreground'}">${fmtAvg(a)}</span>`}${vs ? `<div>${vs}</div>` : ''}`; };
   const againCell = r => { const a = r.again; if (!a?.verdict || a.verdict === 'unknown') return '—'; const cls = a.verdict === 'unlikely' ? 'text-risky' : a.verdict === 'maybe' ? 'text-foreground' : 'text-take'; const w = whereUp(a); return `<span class="${cls}">${a.verdict === 'yes' ? 'Yes' : a.verdict === 'likely' ? 'Should' : a.verdict === 'maybe' ? 'Maybe' : 'Probably not'}</span>${w ? ` · ${w}` : ''}`; };
   const todayCell = r => `<span class="text-foreground whitespace-nowrap">${r.hits} for ${r.ab}</span>${paWords(r) ? `<div class="text-muted-foreground">${paWords(r)}</div>` : ''}`;
-  const liveCols = [{ label: 'Game', hide: 'hidden lg:table-cell', wrap: true }, { label: 'Today', wrap: true, mobileLabel: 'Today:' }, { label: 'Average', mobileLabel: 'Average' }, { label: 'Form', hide: 'hidden lg:table-cell', wrap: true }, { label: 'Pitcher', mobileLabel: 'Facing' }, { label: 'Bats again', hide: 'hidden xl:table-cell' }];
+  const liveCols = [{ label: 'Game', hide: 'hidden lg:table-cell', wrap: true }, { label: 'Today', wrap: true, mobileLabel: 'Today:' }, { label: 'Average', mobileLabel: 'Average', wrap: true }, { label: 'Form', hide: 'hidden xl:table-cell', wrap: true }, { label: 'Pitcher', mobileLabel: 'Facing' }, { label: 'Bats again', hide: 'hidden xl:table-cell' }];
   const liveCells = r => [gameCell(r), todayCell(r), avgCell(r), r.streak >= 3 ? `<span class="text-foreground">${streakText(r)}</span>` : l10Text(r), armCell(r), againCell(r)];
   if (f === 'streak') {
     const hot = withV.filter(x => x.r.streak >= 3 && x.r.hits === 0 && x.v !== 'dead').sort((a, b) => b.r.streak - a.r.streak || a.r.odds - b.r.odds).slice(0, 12);
@@ -464,8 +469,8 @@ function renderBoard() {
   const withV = d.lines.filter(l => !l.start || new Date(l.start) > now - 4 * 3600e3).map(r => ({ r, v: verdictPre(r) }));
   const armCell = r => r.opp_sp?.name ? `<span class="whitespace-nowrap">${esc(lastName(r.opp_sp.name))}${r.opp_sp.rating ? ` ${rateWord(r.opp_sp.rating)}` : ''}</span>` : '—';
   const penCell = r => r.opp_pen ? rateWord(r.opp_pen.health, 'pen') : '—';
-  const avgCell = r => { const a = avgOf(r); return a == null ? '—' : `<span class="${hotBat(r) ? 'text-take' : coldBat(r) ? 'text-risky' : 'text-foreground'}">${fmtAvg(a)}</span>`; };
-  const boardCols = [{ label: 'Game', hide: 'hidden md:table-cell', wrap: true }, { label: 'Average', mobileLabel: 'Average' }, { label: 'Form', wrap: true }, { label: 'Pitcher', mobileLabel: 'Facing' }, { label: 'Bullpen', hide: 'hidden lg:table-cell', mobileLabel: 'Bullpen' }];
+  const avgCell = r => { const a = avgOf(r), vs = vsArmText(r); if (a == null && !vs) return '—'; return `${a == null ? '' : `<span class="${hotBat(r) ? 'text-take' : coldBat(r) ? 'text-risky' : 'text-foreground'}">${fmtAvg(a)}</span>`}${vs ? `<div>${vs}</div>` : ''}`; };
+  const boardCols = [{ label: 'Game', hide: 'hidden md:table-cell', wrap: true }, { label: 'Average', mobileLabel: 'Average', wrap: true }, { label: 'Form', wrap: true }, { label: 'Pitcher', mobileLabel: 'Facing' }, { label: 'Bullpen', hide: 'hidden lg:table-cell', mobileLabel: 'Bullpen' }];
   const boardCells = r => [`<div class="whitespace-nowrap">${esc(shortEvent(r.event))}</div><div class="whitespace-nowrap text-muted-foreground">${when(r.start)}</div>`, avgCell(r), r.streak >= 3 ? `<span class="text-foreground">${streakText(r)}</span>` : l10Text(r), armCell(r), penCell(r)];
   if (f === 'streak') {
     const hot = withV.filter(x => x.r.streak >= 3).sort((a, b) => b.r.streak - a.r.streak || a.r.odds - b.r.odds).slice(0, 12);
