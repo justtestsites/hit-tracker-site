@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hit Line Tracker</title>
+<style>
+  :root { --bg:#0f1115; --card:#171a21; --line:#262a33; --text:#e8eaf0; --muted:#8a90a0;
+          --good:#3ddc84; --bad:#ff5c5c; --warn:#ffb020; --accent:#5b9cff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  header { padding:14px 16px 8px; border-bottom:1px solid var(--line); display:flex; flex-wrap:wrap; gap:8px 16px; align-items:baseline; }
+  header h1 { font-size:18px; margin:0; }
+  header .stamp { color:var(--muted); font-size:13px; }
+  nav { display:flex; gap:6px; padding:10px 16px; border-bottom:1px solid var(--line); overflow-x:auto; }
+  nav button { background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 14px; font-size:14px; cursor:pointer; white-space:nowrap; }
+  nav button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  main { padding:12px 16px 40px; max-width:1100px; margin:0 auto; }
+  section { display:none; } section.on { display:block; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px; margin:0 0 14px; }
+  .card h2 { font-size:15px; margin:0 0 8px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.04em; position:sticky; top:0; background:var(--card); }
+  td.game { color:var(--muted); font-size:13px; white-space:normal; min-width:160px; }
+  .pos { color:var(--good); } .neg { color:var(--bad); } .flag { color:var(--warn); font-weight:700; }
+  .odds { font-variant-numeric:tabular-nums; font-weight:600; }
+  .empty { color:var(--muted); padding:10px 4px; }
+  .tools { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  input[type=search] { background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:14px; min-width:200px; }
+  .wrap { overflow-x:auto; }
+  .note { color:var(--muted); font-size:12px; margin-top:8px; }
+  @media (max-width:600px) { th, td { padding:6px 5px; font-size:13px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>FanDuel “To Record A Hit” tracker</h1>
+  <span class="stamp" id="stamp">loading…</span>
+</header>
+<nav>
+  <button data-tab="live" class="on">Live games</button>
+  <button data-tab="report">Morning movement</button>
+  <button data-tab="board">Full board</button>
+</nav>
+<main>
+  <section id="live" class="on">
+    <div class="card"><h2>Favored pregame · still hitless · line loosened</h2><div id="live-hot"></div></div>
+    <div class="card"><h2>Everyone in live games</h2>
+      <div class="tools"><input type="search" id="live-q" placeholder="filter player or team"></div>
+      <div class="wrap" id="live-all"></div>
+      <div class="note">Plus money on a hitless favorite mostly reflects fewer at-bats left, not a mispricing.</div>
+    </div>
+  </section>
+  <section id="report">
+    <div class="card"><h2 id="rep-title">Movement since last night</h2><div id="rep-meta" class="note"></div></div>
+    <div class="card"><h2>Favored board (with form + opposing starter)</h2><div class="wrap" id="rep-fav"></div></div>
+    <div class="card"><h2>Moved toward MORE favored</h2><div class="wrap" id="rep-up"></div></div>
+    <div class="card"><h2>Moved toward LESS favored</h2><div class="wrap" id="rep-down"></div></div>
+    <div class="card"><h2>New / dropped / unchanged</h2><div id="rep-misc"></div></div>
+  </section>
+  <section id="board">
+    <div class="card"><h2>Latest full board</h2>
+      <div class="tools"><input type="search" id="board-q" placeholder="filter player or team"></div>
+      <div class="wrap" id="board-all"></div>
+    </div>
+  </section>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const odds = o => o == null ? '—' : (o > 0 ? '+' + o : String(o));
+const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const ago = iso => { if (!iso) return ''; const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 1 ? 'just now' : m + ' min ago'; };
+const shortGame = e => esc(e).replace(/\s*\([^)]*\)/g, '');
+const cls = n => n == null ? '' : n > 0 ? 'pos' : n < 0 ? 'neg' : '';
+let DATA = { live: null, report: null, board: null };
+
+async function get(path) {
+  try { const r = await fetch(path + '?t=' + Date.now(), { cache: 'no-store' }); if (!r.ok) return null; return await r.json(); }
+  catch { return null; }
+}
+
+function table(head, rows) {
+  if (!rows.length) return '<div class="empty">Nothing here.</div>';
+  return '<table><thead><tr>' + head.map(h => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>' +
+    rows.map(r => '<tr>' + r.map(c => '<td' + (c.cls ? ' class="' + c.cls + '"' : '') + '>' + (c.html ?? esc(c)) + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
+}
+
+function renderLive() {
+  const d = DATA.live; const q = ($('#live-q').value || '').toLowerCase();
+  if (!d || !d.rows || !d.rows.length) { $('#live-hot').innerHTML = '<div class="empty">No games in progress.</div>'; $('#live-all').innerHTML = ''; return; }
+  const row = r => [
+    { html: (r.flag ? '<span class="flag">★ </span>' : '') + esc(r.player) },
+    { html: shortGame(r.event), cls: 'game' },
+    r.inning ?? '?',
+    r.hits == null ? '?' : r.hits + '-' + r.ab,
+    { html: '<span class="odds">' + odds(r.pre) + '</span> → <span class="odds ' + cls(r.pre != null ? r.odds - r.pre : null) + '">' + odds(r.odds) + '</span>' }
+  ];
+  const head = ['Player', 'Game', 'Inn', 'Today', 'Pregame → Live'];
+  const hot = d.rows.filter(r => r.flag);
+  $('#live-hot').innerHTML = hot.length ? table(head, hot.map(row)) : '<div class="empty">No hitless favorites at plus money right now.</div>';
+  const all = d.rows.filter(r => !q || (r.player + ' ' + r.event).toLowerCase().includes(q));
+  $('#live-all').innerHTML = table(head, all.map(row));
+}
+
+function renderReport() {
+  const d = DATA.report;
+  if (!d) { $('#rep-meta').textContent = 'No morning report yet.'; return; }
+  $('#rep-title').textContent = 'Movement for ' + d.date;
+  $('#rep-meta').textContent = 'Baseline ' + (d.baseline_taken || '').slice(0, 16).replace('T', ' ') + ' → snapshot ' + (d.now_taken || '').slice(0, 16).replace('T', ' ');
+  const rows = d.rows || [];
+  const mv = r => [ esc(r.player), { html: shortGame(r.event), cls: 'game' },
+    { html: '<span class="odds">' + odds(r.prev) + '</span> → <span class="odds">' + odds(r.odds) + '</span>' },
+    { html: r.move == null ? 'new' : (r.move > 0 ? '+' : '') + r.move, cls: cls(r.move) } ];
+  const up = rows.filter(r => r.move > 0).sort((a, b) => b.move - a.move);
+  const down = rows.filter(r => r.move < 0).sort((a, b) => a.move - b.move);
+  $('#rep-up').innerHTML = table(['Player', 'Game', 'Baseline → Now', 'Move'], up.map(mv));
+  $('#rep-down').innerHTML = table(['Player', 'Game', 'Baseline → Now', 'Move'], down.map(mv));
+  const fav = rows.filter(r => r.odds <= (d.favored_cutoff ?? -250)).sort((a, b) => a.odds - b.odds);
+  $('#rep-fav').innerHTML = table(['Player', 'Now', 'Move', 'Streak', 'Last 10', 'Opp SP', 'H/9', 'BAA', 'Last 3'],
+    fav.map(r => { const s = r.sp_form || {}; return [
+      { html: esc(r.player) + (r.streak >= 6 ? ' <span class="flag">🔥' + r.streak + '</span>' : '') },
+      { html: '<span class="odds">' + odds(r.odds) + '</span>' },
+      { html: r.move == null ? 'new' : (r.move > 0 ? '+' : '') + r.move, cls: cls(r.move) },
+      r.streak ?? '?', r.last10 ?? '?', r.sp ?? '?', s.h9 ?? '?', s.baa ?? '?', (s.last3 || []).join(', ') || '?' ]; }));
+  const same = rows.filter(r => r.move === 0), nw = rows.filter(r => r.prev == null), dr = d.dropped || [];
+  const list = (t, xs, f) => xs.length ? '<p><b>' + t + ':</b> ' + xs.map(f).join(', ') + '</p>' : '';
+  $('#rep-misc').innerHTML = list('New to the board', nw, r => esc(r.player) + ' (' + odds(r.odds) + ')') +
+    list('Dropped', dr, r => esc(r.player) + ' (was ' + odds(r.odds) + ')') +
+    list('Unchanged', same, r => esc(r.player) + ' (' + odds(r.odds) + ')') || '<div class="empty">Nothing here.</div>';
+}
+
+function renderBoard() {
+  const d = DATA.board; const q = ($('#board-q').value || '').toLowerCase();
+  if (!d || !d.lines) { $('#board-all').innerHTML = '<div class="empty">No board yet.</div>'; return; }
+  const ls = d.lines.filter(l => !q || (l.player + ' ' + l.event).toLowerCase().includes(q))
+    .sort((a, b) => (a.start || '').localeCompare(b.start || '') || a.event.localeCompare(b.event) || a.odds - b.odds);
+  $('#board-all').innerHTML = table(['Player', 'Game', 'Start', 'Odds'], ls.map(l => [ esc(l.player), { html: shortGame(l.event), cls: 'game' },
+    l.start ? new Date(l.start).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : '',
+    { html: '<span class="odds ' + (l.odds < 0 ? 'pos' : '') + '">' + odds(l.odds) + '</span>' } ]));
+}
+
+async function refresh() {
+  [DATA.live, DATA.report, DATA.board] = await Promise.all([get('data/live.json'), get('data/report.json'), get('data/board.json')]);
+  const t = DATA.live?.generated || DATA.board?.generated;
+  $('#stamp').textContent = t ? 'updated ' + ago(t) + ' (' + t.slice(11, 16) + ' PT)' : 'no data yet';
+  renderLive(); renderReport(); renderBoard();
+}
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('main section').forEach(s => s.classList.toggle('on', s.id === b.dataset.tab));
+});
+$('#live-q').oninput = renderLive; $('#board-q').oninput = renderBoard;
+refresh(); setInterval(refresh, 60000);
+</script>
+</body>
+</html>
