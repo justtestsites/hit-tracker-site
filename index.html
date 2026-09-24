@@ -90,7 +90,7 @@
   .dots i { width:7px; height:7px; border-radius:2px; background:var(--line2); display:block; }
   .dots i.h { background:var(--green); } .dots i.hh { background:var(--green); box-shadow:0 0 0 1px rgba(34,197,94,.5); }
   .dots small { color:var(--text3); font-size:11.5px; font-weight:600; margin-left:4px; }
-  .sp { color:var(--text3); font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; }
+  .sp { color:var(--text3); font-size:12.5px; display:block; line-height:1.5; }
   .sp b { color:var(--text2); font-weight:600; }
   .sp .rt { font-weight:800; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; padding:1px 6px; border-radius:5px; margin-right:5px; }
   .sp .rt.hittable { color:var(--green); background:var(--green-bg); } .sp .rt.tough { color:var(--orange); background:var(--orange-bg); } .sp .rt.neutral { color:var(--text3); background:var(--white-bg); }
@@ -156,7 +156,7 @@
     <div id="live-picks"></div>
     <div class="grid" id="live-games"></div>
     <p class="foot" id="live-note"></p>
-    <div class="legend"><span><i style="background:var(--green)"></i>Take</span><span><i style="background:#fff;opacity:.85"></i>Neutral</span><span><i style="background:var(--orange)"></i>Risky</span><span><i style="background:var(--dead)"></i>Already has a hit</span><span>0-2 = hits–at bats · PA = trips to the plate incl. walks</span><span>Dots = last 10 games, green = got a hit</span><span>Starter tag: hittable / tough from H/9, K/9, BAA and last 3 starts</span></div>
+    <div class="legend"><span><i style="background:var(--green)"></i>Take</span><span><i style="background:#fff;opacity:.85"></i>Neutral</span><span><i style="background:var(--orange)"></i>Risky</span><span><i style="background:var(--dead)"></i>Already has a hit</span><span>0-2 = hits–at bats · PA = trips to the plate incl. walks</span><span>Dots = last 10 games, green = got a hit</span><span>Pitcher tag: hittable / tough from H/9, K/9, BAA and recent starts — rated for whoever is on the mound now (NOW = reliever)</span></div>
     <div class="foot">Targets = favored before first pitch, still hitless, price now better than pregame. Green = worth a look now; orange = late innings or the book has already priced it as unlikely.</div>
   </section>
 
@@ -204,8 +204,8 @@ function verdictLive(r, meta) {
   const inn = inningNum(meta?.inning) ?? inningNum(r.inning) ?? 1;
   const pre = r.pre, now = r.odds, l10 = l10n(r), l10r = l10 ? l10[0] / Math.max(1, l10[1]) : null;
   const strongPre = pre != null && pre <= -180, hot = (r.streak || 0) >= 5, cold = l10r != null && l10r <= 0.4 && !(r.streak >= 3);
-  const sp = r.opp_sp?.rating, spIn = !r.sp_out;                 // starter still pitching?
-  const hittable = spIn && sp === 'hittable', tough = spIn && sp === 'tough';
+  const arm = r.cur_p || r.opp_sp;                                // whoever the hitter faces right now
+  const hittable = arm?.rating === 'hittable', tough = arm?.rating === 'tough';
   if (inn >= 8) return 'risky';                                   // 1 AB left at best
   if (r.hits === 0 && now >= 150) return 'risky';                 // book says it's unlikely now
   if (strongPre && r.hits === 0 && now >= (hittable ? -135 : -115) && inn <= 6 && !cold && !tough) return 'take';
@@ -251,13 +251,21 @@ function todayHtml(r) {
   const pa = r.pa != null ? `${r.pa} PA${extras.length ? ' · ' + extras.join(', ') : ''}` : '';
   return `<div class="today ${r.hits === 0 ? 'z' : 'h'}"><div>${r.hits}-${r.ab}</div>${pa ? `<div class="pa">${pa}</div>` : ''}</div>`;
 }
+const lastName = n => String(n || '').split(' ').slice(-1)[0];
+const armStats = p => [p.h9 != null ? `${p.h9} H/9` : '', p.k9 != null ? `${p.k9} K/9` : '', p.baa ? `${String(p.baa).replace(/^0/, '')} BAA` : ''].filter(Boolean).join(' · ');
 function spHtml(r) {
-  const p = r.opp_sp || (r.sp ? { name: r.sp, ...(r.sp_form || {}) } : null);
-  if (!p || !p.name) return '';
-  const last = p.name.split(' ').slice(-1)[0];
-  const stats = [p.h9 != null ? `${p.h9} H/9` : '', p.k9 != null ? `${p.k9} K/9` : '', p.baa ? `${String(p.baa).replace(/^0/, '')} BAA` : ''].filter(Boolean).join(' · ');
-  const out = r.sp_out ? ` <span class="out">· bullpen in</span>` : '';
-  return `<span class="sp">${p.rating ? `<span class="rt ${p.rating}">${p.rating}</span>` : ''}vs <b>${esc(last)}</b>${stats ? ' · ' + stats : ''}${out}</span>`;
+  const sp = r.opp_sp || (r.sp ? { name: r.sp, ...(r.sp_form || {}) } : null);
+  const cp = r.cur_p;
+  if (cp && cp.name) {
+    const t = cp.tonight || {};
+    const tonight = t.ip != null ? ` · tonight ${t.h ?? 0} H / ${t.ip} IP${t.pitches ? `, ${t.pitches} pitches` : ''}` : '';
+    const who = r.sp_out ? `<span class="out">NOW</span> <b>${esc(lastName(cp.name))}</b> (relief)` : `vs <b>${esc(lastName(cp.name))}</b>`;
+    const started = r.sp_out && sp?.name ? ` · started: ${esc(lastName(sp.name))}` : '';
+    return `<span class="sp">${cp.rating ? `<span class="rt ${cp.rating}">${cp.rating}</span>` : ''}${who} · ${armStats(cp)}${tonight}${started}</span>`;
+  }
+  if (!sp || !sp.name) return '';
+  const st = armStats(sp);
+  return `<span class="sp">${sp.rating ? `<span class="rt ${sp.rating}">${sp.rating}</span>` : ''}vs <b>${esc(lastName(sp.name))}</b>${st ? ' · ' + st : ''}</span>`;
 }
 function playerRow(r, v, opts = {}) {
   const today = todayHtml(r);
@@ -277,7 +285,7 @@ function card(ev, rowsHtml, meta, start) {
     ? `<div class="right"><div class="sc"><span class="t">${esc(away)}</span>${meta.away_runs ?? 0}<span class="t" style="margin:0 2px">–</span>${meta.home_runs ?? 0}<span class="t">${esc(home)}</span></div><div class="inn">${esc(inningWords(meta.inning))}</div></div>`
     : `<div class="right"><div class="time">${when(start)}</div></div>`;
   const spLine = meta && (meta.away_sp || meta.home_sp)
-    ? `<div class="sps">${meta.away_sp ? `<b>${esc(meta.away_sp.name.split(' ').slice(-1)[0])}</b>${meta.away_sp.h9 != null ? ' ' + meta.away_sp.h9 + ' H/9' : ''}` : '—'} vs ${meta.home_sp ? `<b>${esc(meta.home_sp.name.split(' ').slice(-1)[0])}</b>${meta.home_sp.h9 != null ? ' ' + meta.home_sp.h9 + ' H/9' : ''}` : '—'}${meta.current_pitcher ? ` · now pitching: ${esc(meta.current_pitcher.split(' ').slice(-1)[0])}` : ''}</div>` : '';
+    ? `<div class="sps">${meta.away_sp ? `<b>${esc(meta.away_sp.name.split(' ').slice(-1)[0])}</b>${meta.away_sp.h9 != null ? ' ' + meta.away_sp.h9 + ' H/9' : ''}` : '—'} vs ${meta.home_sp ? `<b>${esc(meta.home_sp.name.split(' ').slice(-1)[0])}</b>${meta.home_sp.h9 != null ? ' ' + meta.home_sp.h9 + ' H/9' : ''}` : '—'}${meta.pitching_now ? ` · on the mound: ${['away','home'].map(sd => meta.pitching_now[sd]?.name ? `${esc(meta[sd])} ${esc(lastName(meta.pitching_now[sd].name))}` : '').filter(Boolean).join(', ')}` : ''}</div>` : '';
   return `<div class="card"><div class="ch"><div><div class="matchup">${esc(away)}<span class="at">@</span>${esc(home)}</div>${spLine}</div>${right}</div><div>${rowsHtml}</div></div>`;
 }
 function picksBox(list, title, sub, ctxOf) {
