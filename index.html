@@ -83,6 +83,8 @@
   .dots i { width:6px; height:9px; border-radius:1.5px; background:var(--hair-2); display:block; }
   .dots i.h, .dots i.hh { background:var(--ink-2); }
 
+  .again { margin-top:12px; padding-top:10px; border-top:1px solid var(--hair); font-size:13px; color:var(--ink-3); line-height:1.5; }
+  .again > span:first-child { color:var(--ink); }
   .match { margin-top:14px; padding-top:12px; border-top:1px solid var(--hair); color:var(--ink-3); font-size:13px; line-height:1.55; }
   .match .l { color:var(--ink); font-weight:500; }
   .match .l span { color:var(--ink-3); font-weight:400; }
@@ -218,7 +220,7 @@
     <div id="live-games"></div>
     <p class="foot" id="live-note"></p>
     <div class="legend"><span><i style="background:var(--green)"></i>Take</span><span><i style="background:var(--ink-2)"></i>Neutral</span><span><i style="background:var(--orange)"></i>Risky</span><span>Last 10 bars: filled = got a hit</span></div>
-    <div class="foot">Targets are hitters who were favored before first pitch, still hitless, with a better price than pregame. The book prices most of this in; treat green as worth a look, not a lock.</div>
+    <div class="foot">Targets are hitters who were favored before first pitch, still hitless, with a better price than pregame. "Bats again" is worked out from the lineup, who's up, outs, and the score — a home team that's leading doesn't hit in the bottom of the 9th. The book prices most of this in; treat green as worth a look, not a lock.</div>
   </section>
 
   <section id="board">
@@ -248,9 +250,9 @@
   </section>
   <section id="parlay">
     <p class="kicker" id="parlay-meta"></p>
-    <div class="bar" id="parlay-bar" style="display:none"><div class="seg" id="parlay-seg"><button data-f="3" class="on">3 legs</button><button data-f="4">4 legs</button><button data-f="5">5 legs</button><button data-f="6">6 legs</button></div><div class="seg" id="stake-seg"><button data-f="10">$10</button><button data-f="25" class="on">$25</button><button data-f="50">$50</button><button data-f="100">$100</button></div></div>
+    <div class="bar" id="parlay-bar" style="display:none"><div class="seg" id="parlay-seg"><button data-f="3" class="on">3 players</button><button data-f="4">4 players</button><button data-f="5">5 players</button><button data-f="6">6 players</button></div></div>
     <div id="parlay-out"></div>
-    <div class="foot">Legs qualify when the hitter was favored before the game (-150 or better), has no hit yet, the game is in the 3rd through 7th inning, and he isn't rated risky. One leg per game where possible — two legs from the same game become a same-game parlay, which FanDuel prices lower. Estimated probabilities are a model, not the book's; a parlay multiplies every leg's uncertainty, so size accordingly.</div>
+    <div class="foot">Legs qualify when the hitter was favored before the game (-150 or better), has no hit yet, the game is in the 3rd through 6th inning, his spot in the order is due to come up again, and he isn't rated risky. One per game where possible — two from the same game become a same-game parlay on FanDuel. The percentage is our estimate of each player getting a hit from here, not the book's. FanDuel sets the parlay price; this page only picks the players.</div>
   </section>
 </main>
 
@@ -268,8 +270,23 @@ const inningWords = t => { if (!t) return ''; return t.replace(/^(Top|Bottom|Mid
 const inningNum = t => { const m = /(\d+)/.exec(t || ''); return m ? +m[1] : null; };
 const l10n = r => { const m = /^(\d+)\/(\d+)/.exec(r.last10 || ''); return m ? [+m[1], +m[2]] : null; };
 let DATA = { live: null, report: null, board: null };
-const F = { live: 'targets', board: 'all', move: 'all', parlay: '3', stake: '25' };
+const F = { live: 'targets', board: 'all', move: 'all', parlay: '3' };
 async function get(p) { try { const r = await fetch(p + '?t=' + Date.now(), { cache: 'no-store' }); return r.ok ? await r.json() : null; } catch { return null; } }
+
+/* ---------- bats again ---------- */
+const AGAIN = { yes: 'Bats again', likely: 'Likely bats again', maybe: 'May not bat again', unlikely: 'Probably done for the day', unknown: '' };
+function tripsFromAgain(a) {
+  if (!a || a.team_pa_left == null || a.up_in == null) return null;
+  let trips = 0, rem = a.team_pa_left - a.up_in;
+  while (rem > 0) { trips += Math.min(1, rem); rem -= 9; }
+  return Math.max(0.15, trips);
+}
+function againHtml(r, inn) {
+  const a = r.again; if (!a || a.verdict === 'unknown') return '';
+  const late = (inn ?? 0) >= 7 || a.verdict === 'maybe' || a.verdict === 'unlikely';
+  const cls = a.verdict === 'unlikely' ? 'rate-tough' : a.verdict === 'maybe' ? 'rate-ok' : late ? 'rate-hittable' : '';
+  return `<div class="again"><span class="${cls}" style="font-weight:600">${AGAIN[a.verdict]}</span><span> · ${esc(a.note)}</span></div>`;
+}
 
 /* ---------- verdicts ---------- */
 // live: pregame price, hits so far, innings left, streak, last-10
@@ -282,7 +299,9 @@ function verdictLive(r, meta) {
   const hittable = arm?.rating === 'hittable', tough = arm?.rating === 'tough';
   const b = r.bvp, bvpGood = b && b.pa >= 10 && parseFloat(b.avg) >= .300, bvpBad = b && b.pa >= 10 && parseFloat(b.avg) <= .150;
   const penTaxed = r.opp_pen?.health === 'taxed';
-  if (inn >= 8 && !(penTaxed && r.hits === 0 && strongPre)) return 'risky';   // 1 AB left at best — unless a gassed pen is coming
+  const ag = r.again?.verdict;
+  if (ag === 'unlikely') return 'risky';                                       // his spot probably doesn't come up again
+  if (inn >= 8 && ag !== 'yes' && ag !== 'likely' && !(penTaxed && r.hits === 0 && strongPre)) return 'risky';
   if (bvpBad && r.hits === 0 && now > -130) return 'risky';
   if (r.hits === 0 && now >= 150) return 'risky';                 // book says it's unlikely now
   if (strongPre && r.hits === 0 && now >= (hittable || bvpGood || penTaxed ? -135 : -115) && inn <= 7 && !cold && !tough) return 'take';
@@ -397,7 +416,7 @@ function tile(r, v, opts = {}) {
   }
   return `<div class="tile ${v}">
     <div class="top"><div class="who"><div class="team">${esc(r.team || '')}</div><div class="name">${esc(r.player)}</div></div>${oddsBox(v, r.odds, r.hits != null ? pre : (opts.preKey ? pre : null))}</div>
-    <div class="facts">${f1}${f2}${f3}</div>${match}
+    <div class="facts">${f1}${f2}${f3}</div>${r.hits != null ? againHtml(r, inningNum(r.inning)) : ''}${match}
   </div>`;
 }
 
@@ -560,7 +579,8 @@ function legModel(r, meta) {
   if (l10r != null && l10r <= 0.4) { perPA *= 0.95; notes.push(`cold last 10 (${r.last10})`); }
   if (r.bvp && r.bvp.pa >= 10) { const a = parseFloat(r.bvp.avg); if (a >= .300) { perPA *= 1.05; notes.push(`hits him (${r.bvp.h}-for-${r.bvp.ab})`); } else if (a <= .150) { perPA *= 0.95; notes.push(`struggles vs him (${r.bvp.h}-for-${r.bvp.ab})`); } }
   if (r.opp_pen?.health === 'taxed') { perPA *= 1.03; notes.push('weak relief coming'); }
-  const left = remainingPA(inn, r.pa);
+  const fromLineup = tripsFromAgain(r.again);
+  const left = fromLineup != null ? Math.min(remainingPA(inn, r.pa), fromLineup + 0.15) : remainingPA(inn, r.pa);
   const p = 1 - Math.pow(1 - Math.min(0.6, perPA), left);
   return { p, left, inn, notes, edge: p - implied(r.odds) };
 }
@@ -569,7 +589,8 @@ function parlayLegs() {
   const legs = [];
   for (const r of d.rows) {
     const meta = d.games?.[r.event]; const inn = inningNum(meta?.inning) ?? inningNum(r.inning);
-    if (r.pre == null || r.pre > -150 || r.hits !== 0 || inn == null || inn < 3 || inn > 7) continue;
+    if (r.pre == null || r.pre > -150 || r.hits !== 0 || inn == null || inn < 3 || inn > 6) continue;
+    if (r.again?.verdict === 'unlikely' || r.again?.verdict === 'maybe') continue;
     const v = verdictLive(r, meta); if (v === 'risky' || v === 'dead') continue;
     legs.push({ r, meta, v, m: legModel(r, meta) });
   }
@@ -584,30 +605,24 @@ function pickParlay(legs, n) {
 }
 function renderParlay() {
   const { legs, games } = parlayLegs();
-  const n = +(F.parlay || 3), stake = +(F.stake || 25);
+  const n = +(F.parlay || 3);
   $('#n-parlay').textContent = legs.length;
   const bar = $('#parlay-bar');
   if (games < 2) {
     bar.style.display = 'none';
     $('#parlay-meta').textContent = '';
-    $('#parlay-out').innerHTML = `<div class="empty">${legs.length ? 'Only one game has qualifying hitters right now — the builder needs at least two live games in the 3rd–7th inning.' : 'No qualifying hitters right now. Legs appear once games reach the 3rd inning with favored hitters still hitless.'}</div>`;
+    $('#parlay-out').innerHTML = `<div class="empty">${legs.length ? 'Only one game has qualifying hitters right now — the builder needs at least two live games in the 3rd–6th inning.' : 'No qualifying hitters right now. Legs appear once games reach the 3rd inning with favored hitters still hitless.'}</div>`;
     return;
   }
   bar.style.display = '';
   $('#parlay-meta').textContent = `${legs.length} qualifying hitter${legs.length === 1 ? '' : 's'} across ${games} live game${games === 1 ? '' : 's'}, ranked by estimated chance of getting a hit from here. All odds are FanDuel's current live prices.`;
   const chosen = pickParlay(legs, n);
-  if (chosen.length < n) { $('#parlay-out').innerHTML = `<div class="empty">Only ${chosen.length} qualifying leg${chosen.length === 1 ? '' : 's'} right now — try a smaller parlay.</div>`; return; }
-  const dec = chosen.reduce((a, x) => a * toDec(x.r.odds), 1), pAll = chosen.reduce((a, x) => a * x.m.p, 1);
+  if (chosen.length < n) { $('#parlay-out').innerHTML = `<div class="empty">Only ${chosen.length} qualifying player${chosen.length === 1 ? '' : 's'} right now — try a smaller group.</div>`; return; }
   const sameGame = chosen.length - new Set(chosen.map(x => x.r.event)).size;
-  const legHtml = chosen.map((x, i) => `<div class="leg"><div class="n">${i + 1}</div><div><div class="nm">${esc(x.r.player)}<span>${esc(x.r.team || '')} · ${esc(inningWords(x.meta?.inning || x.r.inning))} · ${x.r.hits}-${x.r.ab}${x.r.pa != null ? `, ${x.r.pa} PA` : ''}</span></div><div class="why">About <b>${Math.round(x.m.left * 10) / 10} trips left</b> · est. <b>${Math.round(x.m.p * 100)}%</b> to get a hit${x.m.notes.length ? ' · ' + x.m.notes.join(' · ') : ''}</div></div><div class="od"><div class="o">${odds(x.r.odds)}</div><div class="pr">was ${odds(x.r.pre)}</div></div></div>`).join('');
+  const legHtml = chosen.map((x, i) => `<div class="leg"><div class="n">${i + 1}</div><div><div class="nm">${esc(x.r.player)}<span>${esc(x.r.team || '')} · ${esc(inningWords(x.meta?.inning || x.r.inning))} · ${x.r.hits}-${x.r.ab}${x.r.pa != null ? `, ${x.r.pa} PA` : ''}</span></div><div class="why"><b>about ${Math.round(x.m.left * 10) / 10} trips left</b>${x.r.again?.note ? ` (${esc(x.r.again.note.split(';')[0])})` : ''} · est. <b>${Math.round(x.m.p * 100)}%</b> to get a hit${x.m.notes.length ? ' · ' + x.m.notes.join(' · ') : ''}</div></div><div class="od"><div class="o">${odds(x.r.odds)}</div><div class="pr">was ${odds(x.r.pre)}</div></div></div>`).join('');
   const alts = legs.filter(x => !chosen.includes(x)).slice(0, 4);
   $('#parlay-out').innerHTML = `<div class="parlay">
-    <div class="ph"><div class="t">${n}-leg live parlay</div><div class="src">Odds from FanDuel · ${sameGame ? `${sameGame + 1} legs share a game (FanDuel prices that part as a same-game parlay)` : 'one leg per game'}</div></div>
-    <div class="sum">
-      <div><div class="k">Parlay odds</div><div class="v o">${toAmer(dec)}</div></div>
-      <div><div class="k">$${stake} pays</div><div class="v">$${(stake * dec).toFixed(2)}<small>profit $${(stake * (dec - 1)).toFixed(2)}</small></div></div>
-      <div><div class="k">Estimated chance all ${n} hit</div><div class="v">${Math.round(pAll * 1000) / 10}%<small>book implies ${Math.round(100 / dec * 10) / 10}%</small></div></div>
-    </div>
+    <div class="ph"><div class="t">${n} players</div><div class="src">Odds from FanDuel, as of the last pull · ${sameGame ? `${sameGame + 1} share a game` : 'one per game'} · build it in the FanDuel app for the exact parlay price</div></div>
     ${legHtml}
     ${alts.length ? `<div class="alts"><b>Next up:</b> ${alts.map(x => `${esc(x.r.player)} ${odds(x.r.odds)} (${Math.round(x.m.p * 100)}%)`).join(' · ')}</div>` : ''}
   </div>`;
@@ -625,7 +640,7 @@ document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
   document.querySelectorAll('main section').forEach(s => s.classList.toggle('on', s.id === b.dataset.tab));
 });
-for (const [id, key, fn] of [['#live-seg', 'live', renderLive], ['#board-seg', 'board', renderBoard], ['#move-seg', 'move', renderMove], ['#parlay-seg', 'parlay', renderParlay], ['#stake-seg', 'stake', renderParlay]])
+for (const [id, key, fn] of [['#live-seg', 'live', renderLive], ['#board-seg', 'board', renderBoard], ['#move-seg', 'move', renderMove], ['#parlay-seg', 'parlay', renderParlay]])
   document.querySelectorAll(id + ' button').forEach(b => b.onclick = () => { document.querySelectorAll(id + ' button').forEach(x => x.classList.toggle('on', x === b)); F[key] = b.dataset.f; fn(); });
 $('#live-q').oninput = renderLive; $('#board-q').oninput = renderBoard; $('#move-q').oninput = renderMove;
 refresh(); setInterval(refresh, 60000);
