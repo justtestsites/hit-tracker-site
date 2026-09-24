@@ -207,7 +207,7 @@
   <section id="move">
     <div class="bar">
       <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="move-q" type="search" placeholder="Player or team"></div>
-      <div class="seg" id="move-seg"><button data-f="all" class="on">All games</button><button data-f="live">Live now</button><button data-f="movers">Movers only</button></div>
+      <div class="seg" id="move-seg"><button data-f="all" class="on">All games</button><button data-f="live">Live now</button><button data-f="movers">More favored only</button></div>
     </div>
     <div id="move-top"></div>
     <div class="grid" id="move-games"></div>
@@ -463,12 +463,14 @@ function moveRow(m) {
 
 function renderMove() {
   const d = DATA.move, q = ($('#move-q').value || '').toLowerCase(), f = F.move;
-  const rows = d?.rows || []; $('#n-move').textContent = rows.filter(m => m.now !== m.open).length;
+  const rows = d?.rows || []; $('#n-move').textContent = rows.filter(m => m.now < m.open).length;
   if (!rows.length) { $('#move-top').innerHTML = ''; $('#move-games').innerHTML = '<div class="empty">No lines captured yet.</div>'; return; }
   const liveEv = new Set((DATA.live?.rows || []).map(r => r.event));
-  const movers = rows.filter(m => m.now !== m.open).sort((a, b) => Math.abs(b.now - b.open) - Math.abs(a.now - a.open)).slice(0, 8);
-  $('#move-top').innerHTML = movers.length ? `<div class="picks"><h2>Biggest moves today</h2><p>Since the line first appeared on the board.</p><div class="card">${movers.map(moveRow).join('')}</div></div>` : '';
-  const keep = rows.filter(m => matchQ(m, q) && (f === 'all' || (f === 'live' && liveEv.has(m.event)) || (f === 'movers' && m.now !== m.open)));
+  const now = Date.now();
+  const pregame = m => !m.start || new Date(m.start) > now;
+  const movers = rows.filter(m => pregame(m) && m.now < m.open).sort((a, b) => (a.now - a.open) - (b.now - b.open)).slice(0, 10);
+  $('#move-top').innerHTML = movers.length ? `<div class="picks"><h2>Getting more favored</h2><p>Pregame lines that have shortened since they opened — the market leaning into these hitters. Once a game starts, its prices move to the Live tab.</p><div class="card">${movers.map(moveRow).join('')}</div></div>` : '<div class="picks"><h2>Getting more favored</h2><p>No pregame lines have shortened yet today.</p></div>';
+  const keep = rows.filter(m => matchQ(m, q) && (f === 'all' || (f === 'live' && liveEv.has(m.event)) || (f === 'movers' && m.now < m.open)));
   const games = [...groupBy(keep, m => m.event)].sort((a, b) => (a[1][0].start || '').localeCompare(b[1][0].start || ''));
   $('#move-games').innerHTML = games.map(([ev, ms]) => { ms.sort((a, b) => (a.now - a.open) - (b.now - b.open)); return card(ev, ms.map(moveRow).join(''), DATA.live?.games?.[ev], ms[0].start); }).join('') || '<div class="empty">Nothing matches.</div>';
   renderReportBlock();
