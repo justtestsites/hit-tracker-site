@@ -156,7 +156,7 @@ const KEY = {
   ]],
   parlay: ['Live parlays', [
     ['Who qualifies', 'Favored before the game (-150 or better), no hit yet, game in the 3rd through 6th inning, and his spot in the order is coming up again.'],
-    ['One per team', 'The ticket takes the best hitter from each team. Two hitters from the same game is fine if they are on opposite sides. A second hitter from one team is used only on 5 and 6 player tickets when there are not enough teams, and only if he is the next best overall.'],
+    ['One per team', 'The ticket takes the best hitter from each team. Two hitters from the same game is fine if they are on opposite sides. A second hitter from one team is used only on 5 and 6 player tickets when there are not enough teams, only if he is the next best overall, and only one team per game can double up: never two and two from one game.'],
     ['% to get a hit', 'Our estimate of his chance to get a hit before the game ends.'],
     ['Odds', 'FanDuel’s current price for each player. Build the ticket on FanDuel to see the payout.'],
   ]],
@@ -343,8 +343,9 @@ function pickParlay(legs, n) {
   const chosen = [], teams = new Set();
   const teamOf = x => x.r.team || x.r.event;
   for (const x of legs) if (!teams.has(teamOf(x))) { chosen.push(x); teams.add(teamOf(x)); if (chosen.length === n) return chosen; }
-  if (n >= 5) { const perTeam = {}; for (const x of chosen) perTeam[teamOf(x)] = 1;
-    for (const x of legs) if (!chosen.includes(x) && (perTeam[teamOf(x)] || 0) < 2) { chosen.push(x); perTeam[teamOf(x)] = (perTeam[teamOf(x)] || 0) + 1; if (chosen.length === n) return chosen; } }
+  if (n >= 5) { const perTeam = {}, doubledGames = new Set(); for (const x of chosen) perTeam[teamOf(x)] = 1;
+    // never two-and-two from one game: only one team per game may double up
+    for (const x of legs) if (!chosen.includes(x) && (perTeam[teamOf(x)] || 0) < 2 && !doubledGames.has(x.r.event)) { chosen.push(x); perTeam[teamOf(x)] = (perTeam[teamOf(x)] || 0) + 1; doubledGames.add(x.r.event); if (chosen.length === n) return chosen; } }
   return chosen;
 }
 
