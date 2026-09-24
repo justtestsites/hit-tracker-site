@@ -142,12 +142,13 @@
   <section id="live" class="on">
     <div class="bar">
       <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="live-q" type="search" placeholder="Player or team"></div>
-      <div class="seg" id="live-seg"><button data-f="all" class="on">All</button><button data-f="take">Take</button><button data-f="hitless">Hitless</button><button data-f="streak">Streaks</button></div>
+      <div class="seg" id="live-seg"><button data-f="targets" class="on">Targets</button><button data-f="streak">Streaks</button><button data-f="all">Everyone</button></div>
     </div>
     <div id="live-picks"></div>
     <div class="grid" id="live-games"></div>
+    <p class="foot" id="live-note"></p>
     <div class="legend"><span><i style="background:var(--green)"></i>Take</span><span><i style="background:#fff;opacity:.85"></i>Neutral</span><span><i style="background:var(--orange)"></i>Risky</span><span><i style="background:var(--dead)"></i>Already has a hit</span><span>0-2 = hits–at bats today</span><span>Dots = last 10 games, green = got a hit</span></div>
-    <div class="foot">Verdicts are a quick read on pregame price, hits left, streak and form — not a guarantee. The book prices most of this in.</div>
+    <div class="foot">Targets = favored before first pitch, still hitless, price now better than pregame. Green = worth a look now; orange = late innings or the book has already priced it as unlikely.</div>
   </section>
 
   <section id="board">
@@ -184,7 +185,7 @@ const inningWords = t => { if (!t) return ''; return t.replace(/^(Top|Bottom|Mid
 const inningNum = t => { const m = /(\d+)/.exec(t || ''); return m ? +m[1] : null; };
 const l10n = r => { const m = /^(\d+)\/(\d+)/.exec(r.last10 || ''); return m ? [+m[1], +m[2]] : null; };
 let DATA = { live: null, report: null, board: null };
-const F = { live: 'all', board: 'all' };
+const F = { live: 'targets', board: 'all' };
 async function get(p) { try { const r = await fetch(p + '?t=' + Date.now(), { cache: 'no-store' }); return r.ok ? await r.json() : null; } catch { return null; } }
 
 /* ---------- verdicts ---------- */
@@ -254,22 +255,27 @@ const groupBy = (xs, k) => { const m = new Map(); for (const x of xs) { const kk
 const matchQ = (r, q) => !q || (r.player + ' ' + stripPitchers(r.event) + ' ' + (r.team || '')).toLowerCase().includes(q);
 
 /* ---------- renderers ---------- */
+// a "target": favored before the game, no hit yet, and the live price is better than pregame
+const isTarget = r => r.pre != null && r.pre <= -150 && r.hits === 0 && r.odds > r.pre;
 function renderLive() {
   const d = DATA.live, q = ($('#live-q').value || '').toLowerCase(), f = F.live;
-  $('#n-live').textContent = d?.rows?.length ?? 0;
-  if (!d?.rows?.length) { $('#live-picks').innerHTML = ''; $('#live-games').innerHTML = '<div class="empty">No games in progress right now.</div>'; return; }
+  $('#n-live').textContent = d?.rows?.filter(isTarget).length ?? 0;
+  if (!d?.rows?.length) { $('#live-picks').innerHTML = ''; $('#live-games').innerHTML = '<div class="empty">No games in progress right now.</div>'; $('#live-note').textContent = ''; return; }
   const withV = d.rows.map(r => ({ r, v: verdictLive(r, d.games?.[r.event]) }));
-  const takes = withV.filter(x => x.v === 'take').sort((a, b) => b.r.odds - a.r.odds);
-  $('#live-picks').innerHTML = picksBox(takes, 'Worth a look right now', 'Favored before the game, still hitless, at-bats left — or riding a streak.',
-    r => `${esc(inningWords(d.games?.[r.event]?.inning || r.inning))} · ${r.streak >= 3 ? r.streak + '-game streak · ' : ''}${r.last10 ? 'L10 ' + r.last10 : ''}`);
-  const keep = withV.filter(({ r, v }) => matchQ(r, q) && (f === 'all' || (f === 'take' && v === 'take') || (f === 'hitless' && r.hits === 0) || (f === 'streak' && r.streak >= 3)));
+  const takes = withV.filter(x => x.v === 'take' && isTarget(x.r)).sort((a, b) => (b.r.odds - b.r.pre) - (a.r.odds - a.r.pre));
+  $('#live-picks').innerHTML = picksBox(takes, 'Best spots right now', 'Strong pregame favorite, still hitless, at-bats left, price has moved your way.',
+    r => `${esc(inningWords(d.games?.[r.event]?.inning || r.inning))}${r.streak >= 3 ? ' · ' + r.streak + '-game streak' : ''}${r.last10 ? ' · L10 ' + r.last10 : ''}`);
+  const keep = withV.filter(({ r }) => matchQ(r, q) && (f === 'all' || (f === 'targets' && isTarget(r)) || (f === 'streak' && r.streak >= 3 && r.hits === 0)));
   const order = { take: 0, neutral: 1, risky: 2, dead: 3 };
+  const innOf = ev => inningNum(d.games?.[ev]?.inning) ?? 99;
   const cards = [];
-  for (const [ev, xs] of groupBy(keep, x => x.r.event)) {
-    xs.sort((a, b) => order[a.v] - order[b.v] || (a.r.pre ?? a.r.odds) - (b.r.pre ?? b.r.odds));
+  for (const [ev, xs] of [...groupBy(keep, x => x.r.event)].sort((a, b) => innOf(a[0]) - innOf(b[0]))) {
+    xs.sort((a, b) => order[a.v] - order[b.v] || ((b.r.pre != null ? b.r.odds - b.r.pre : -1e9) - (a.r.pre != null ? a.r.odds - a.r.pre : -1e9)));
     cards.push(card(ev, xs.map(({ r, v }) => playerRow(r, v, { pre: r.pre })).join(''), d.games?.[ev], xs[0].r.start));
   }
-  $('#live-games').innerHTML = cards.join('') || '<div class="empty">Nothing matches.</div>';
+  const noPre = f === 'targets' && d.rows.some(r => r.pre == null && r.hits === 0);
+  $('#live-note').textContent = noPre ? 'Some hitless players are hidden because no pregame line was captured for them yet (they show under Everyone).' : '';
+  $('#live-games').innerHTML = cards.join('') || (f === 'targets' ? '<div class="empty">No favored hitters are still hitless with a better price right now.</div>' : '<div class="empty">Nothing matches.</div>');
 }
 function renderBoard() {
   const d = DATA.board, q = ($('#board-q').value || '').toLowerCase(), f = F.board;
