@@ -218,6 +218,7 @@ function vsArmText(r) {
   const a = b.h / b.ab, big = b.pa >= 10, cls = big && a >= .300 ? 'text-take' : big && a <= .150 ? 'text-risky' : 'text-foreground';
   return `<span class="whitespace-nowrap"><span class="${cls}">${fmtAvg(a)}</span> vs ${esc(lastName(arm.name))}</span> <span class="m whitespace-nowrap">· ${b.h} for ${b.ab}</span>`;
 }
+const vsArmRow = r => { const b = r.bvp, arm = r.cur_p || r.opp_sp; if (!b || !arm?.name || !b.ab) return null; const a = b.h / b.ab, big = b.pa >= 10, cls = big && a >= .300 ? 'text-take' : big && a <= .150 ? 'text-risky' : ''; return ['Vs pitcher', `<span class="${cls}">${fmtAvg(a)}</span> <span class="m">· ${b.h} for ${b.ab} vs ${esc(lastName(arm.name))}</span>`]; };
 const isHotSpot = (r, meta) => { const inn = inningNum(meta?.inning) ?? inningNum(r.inning); return hotBat(r) && r.hits === 0 && inn != null && inn >= 4 && r.again?.verdict !== 'unlikely'; };
 const WX = {};                                                    // event -> weather, filled from every data file
 const wxOf = ev => WX[ev] || null;
@@ -366,7 +367,7 @@ function tile(r, v, opts = {}) {
   const l = l10n(r);
   if (!live) rows.push(['Last 10', l ? `Hit in ${l[0]} of ${l[1]}${dots(r)}` : '—']);
   const lastH = r.last10_hits?.length ? r.last10_hits[r.last10_hits.length - 1] : null;
-  { const a = avgOf(r), vs = vsArmText(r); const main = r.avg == null ? '' : a == null ? `${fmtAvg(r.avg)} <span class="m">· only ${r.ab_season} at bats</span>` : `<span class="${hotBat(r) ? 'text-take' : coldBat(r) ? 'text-risky' : ''}">${fmtAvg(a)}</span>${hotBat(r) ? ' <span class="m">· hot bat</span>' : ''}`; if (main || vs) rows.push(['Average', `${main}${vs ? `<div>${vs}</div>` : ''}`]); }
+  { const a = avgOf(r); const main = r.avg == null ? '' : a == null ? `${fmtAvg(r.avg)} <span class="m">· only ${r.ab_season} at bats</span>` : `<span class="${hotBat(r) ? 'text-take' : coldBat(r) ? 'text-risky' : ''}">${fmtAvg(a)}</span>${hotBat(r) ? ' <span class="m">· hot bat</span>' : ''}`; if (main) rows.push(['Average', main]); const vr = vsArmRow(r); if (vr) rows.push(vr); }
   rows.push(['Streak', r.streak == null ? '—' : r.streak >= 2 ? `${r.streak} games${r.streak_hits ? ` <span class="m">· ${r.streak_hits} hits</span>` : ''}` : r.streak === 1 ? `${lastH ? `${lastH} hit${lastH === 1 ? '' : 's'}` : 'Hit'} yesterday` : 'None' + (live && l ? ` <span class="m">· hit in ${l[0]} of last 10</span>` : '')]);
   if (live && r.again && r.again.verdict !== 'unknown') {
     const a = r.again, where = whereUp(a);
