@@ -269,7 +269,10 @@ const isTarget = r => r.pre != null && r.pre <= -150 && r.hits === 0 && r.odds >
 function renderLive() {
   const d = DATA.live, q = ($('#live-q').value || '').toLowerCase(), f = F.live;
   $('#n-live').textContent = d?.rows?.filter(isTarget).length ?? 0;
-  if (!d?.rows?.length) { $('#live-picks').innerHTML = ''; $('#live-games').innerHTML = '<div class="empty">No games in progress right now.</div>'; $('#live-note').textContent = ''; return; }
+  if (!d?.rows?.length) {
+    const nx = d?.next_start ? new Date(d.next_start) : null;
+    const nxt = nx ? `Next first pitch ${nx.toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })} — pulls switch to every 3 minutes then.` : 'Checking for line movement every 20 minutes until then.';
+    $('#live-picks').innerHTML = ''; $('#live-games').innerHTML = `<div class="empty">No games in progress right now.<br><span style="font-size:13px">${nxt}</span></div>`; $('#live-note').textContent = ''; return; }
   const withV = d.rows.map(r => ({ r, v: verdictLive(r, d.games?.[r.event]) }));
   const takes = withV.filter(x => x.v === 'take' && isTarget(x.r)).sort((a, b) => (b.r.odds - b.r.pre) - (a.r.odds - a.r.pre));
   $('#live-picks').innerHTML = picksBox(takes, 'Best spots right now', 'Strong pregame favorite, still hitless, at-bats left, price has moved your way.',
