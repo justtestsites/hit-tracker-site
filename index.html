@@ -156,6 +156,7 @@ const KEY = {
   ]],
   parlay: ['Live parlays', [
     ['Who qualifies', 'Favored before the game (-150 or better), no hit yet, game in the 3rd through 6th inning, and his spot in the order is coming up again.'],
+    ['One per team', 'The ticket takes the best hitter from each team. Two hitters from the same game is fine if they are on opposite sides. A second hitter from one team is used only on 5 and 6 player tickets when there are not enough teams, and only if he is the next best overall.'],
     ['% to get a hit', 'Our estimate of his chance to get a hit before the game ends.'],
     ['Odds', 'FanDuel’s current price for each player. Build the ticket on FanDuel to see the payout.'],
   ]],
@@ -337,9 +338,13 @@ function parlayLegs() {
   return { legs, games: new Set(legs.map(x => x.r.event)).size };
 }
 function pickParlay(legs, n) {
-  const chosen = [], used = new Set();
-  for (const x of legs) if (!used.has(x.r.event)) { chosen.push(x); used.add(x.r.event); if (chosen.length === n) return chosen; }
-  for (const x of legs) if (!chosen.includes(x)) { chosen.push(x); if (chosen.length === n) return chosen; }
+  // One player per team (two from the same game is fine if they are on different teams).
+  // A second player from the same team only for 5+ player tickets, only when there are not enough teams, and only the next-best hitter overall.
+  const chosen = [], teams = new Set();
+  const teamOf = x => x.r.team || x.r.event;
+  for (const x of legs) if (!teams.has(teamOf(x))) { chosen.push(x); teams.add(teamOf(x)); if (chosen.length === n) return chosen; }
+  if (n >= 5) { const perTeam = {}; for (const x of chosen) perTeam[teamOf(x)] = 1;
+    for (const x of legs) if (!chosen.includes(x) && (perTeam[teamOf(x)] || 0) < 2) { chosen.push(x); perTeam[teamOf(x)] = (perTeam[teamOf(x)] || 0) + 1; if (chosen.length === n) return chosen; } }
   return chosen;
 }
 
@@ -552,7 +557,7 @@ function renderParlay() {
   $('#parlay-meta').textContent = `${legs.length} hitter${legs.length === 1 ? '' : 's'} qualify across ${games} live games, ranked by their chance of getting a hit from here. Player odds are FanDuel's, as of the last pull.`;
   const chosen = pickParlay(legs, n);
   if (chosen.length < n) { $('#parlay-out').innerHTML = empty(`Only ${chosen.length} qualifying player${chosen.length === 1 ? '' : 's'} right now — try a smaller group.`); return; }
-  const sameGame = chosen.length - new Set(chosen.map(x => x.r.event)).size;
+  const sameGame = chosen.length - new Set(chosen.map(x => x.r.event)).size, sameTeam = chosen.length - new Set(chosen.map(x => x.r.team || x.r.event)).size;
   const legLine = x => {
     const arm = x.r.cur_p || x.r.opp_sp, a = x.r.again;
     const where = whereUp(a) || '—';
@@ -572,7 +577,7 @@ function renderParlay() {
     legHtml += `<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 bg-muted/40 px-5 py-2 text-[13px]"><span class="flex items-center gap-1.5 font-medium whitespace-nowrap">${logo(aA, 16)}${esc(nick(t.away))} <span class="text-muted-foreground">@</span> ${logo(hA, 16)}${esc(nick(t.home))}</span><span class="text-muted-foreground whitespace-nowrap">${esc(inningWords(meta?.inning || xs[0].r.inning))}${xs.length > 1 ? ` · ${xs.length} players from this game` : ''}</span></div>` + xs.map(x => leg(x, i++)).join('');
   }
   const alts = legs.filter(x => !chosen.includes(x)).slice(0, 4);
-  $('#parlay-out').innerHTML = `<div class="card"><div class="flex flex-wrap items-baseline justify-between gap-2 px-5 pt-4 pb-3"><div class="text-[15px] font-semibold">${n} players</div><div class="text-sm text-muted-foreground">${sameGame ? 'Players from the same game are grouped' : 'One player per game'}</div></div><div class="border-t border-border">${legHtml}</div>${alts.length ? `<div class="border-t border-border px-5 py-3 text-sm text-muted-foreground"><span class="font-medium text-foreground">Next up:</span> ${alts.map(x => `${esc(x.r.player)} ${odds(x.r.odds)}, ${Math.round(x.m.p * 100)}%`).join(' · ')}</div>` : ''}</div>`;
+  $('#parlay-out').innerHTML = `<div class="card"><div class="flex flex-wrap items-baseline justify-between gap-2 px-5 pt-4 pb-3"><div class="text-[15px] font-semibold">${n} players</div><div class="text-sm text-muted-foreground">${sameTeam ? 'Two from one team because there were not enough teams' : sameGame ? 'One player per team · players from the same game are grouped' : 'One player per team'}</div></div><div class="border-t border-border">${legHtml}</div>${alts.length ? `<div class="border-t border-border px-5 py-3 text-sm text-muted-foreground"><span class="font-medium text-foreground">Next up:</span> ${alts.map(x => `${esc(x.r.player)} ${odds(x.r.odds)}, ${Math.round(x.m.p * 100)}%`).join(' · ')}</div>` : ''}</div>`;
 }
 
 /* ===== boot ===== */
