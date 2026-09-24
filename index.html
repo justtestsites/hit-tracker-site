@@ -78,8 +78,8 @@
   .facts { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-top:16px; padding-top:14px; border-top:1px solid var(--hair); }
   .fact .k { color:var(--ink-3); font-size:12px; }
   .fact .v { font-size:15px; font-weight:600; margin-top:2px; white-space:nowrap; }
-  .fact .v small { color:var(--ink-3); font-weight:400; font-size:12px; }
-  .dots { display:inline-flex; gap:2px; align-items:center; vertical-align:middle; margin-left:6px; }
+  .fact .s { color:var(--ink-3); font-size:12px; margin-top:2px; }
+  .dots { display:inline-flex; gap:2px; align-items:center; vertical-align:middle; }
   .dots i { width:6px; height:9px; border-radius:1.5px; background:var(--hair-2); display:block; }
   .dots i.h, .dots i.hh { background:var(--ink-2); }
 
@@ -98,12 +98,13 @@
   .picks { margin-bottom:32px; }
   .picks h2 { margin:0 0 2px; font-size:15px; font-weight:600; }
   .picks p { margin:0 0 12px; color:var(--ink-3); font-size:13px; }
-  .pick-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(360px,1fr)); gap:0 32px; border-top:1px solid var(--hair); }
+  .pick-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(440px,1fr)); gap:0 40px; border-top:1px solid var(--hair); }
   .pick { display:flex; align-items:center; gap:14px; padding:11px 0; border-bottom:1px solid var(--hair); }
   .pick .mid { flex:1; min-width:0; }
   .pick .nm { font-weight:600; font-size:15px; }
   .pick .nm span { color:var(--ink-3); font-weight:500; font-size:12px; margin-right:8px; }
-  .pick .ctx { color:var(--ink-3); font-size:12.5px; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pick .ctx { color:var(--ink-3); font-size:12.5px; margin-top:2px; line-height:1.45; }
+  .pick .ctx b { color:var(--ink-2); font-weight:500; }
   .pick .today { color:var(--ink-2); font-size:13px; white-space:nowrap; }
   .pick .price { text-align:right; min-width:64px; }
   .pick .price .now { font-size:18px; font-weight:600; color:var(--green); }
@@ -219,8 +220,8 @@
     <div id="live-picks"></div>
     <div id="live-games"></div>
     <p class="foot" id="live-note"></p>
-    <div class="legend"><span><i style="background:var(--green)"></i>Take</span><span><i style="background:var(--ink-2)"></i>Neutral</span><span><i style="background:var(--orange)"></i>Risky</span><span>Last 10 bars: filled = got a hit</span></div>
-    <div class="foot">Targets are hitters who were favored before first pitch, still hitless, with a better price than pregame. "Bats again" is worked out from the lineup, who's up, outs, and the score — a home team that's leading doesn't hit in the bottom of the 9th. The book prices most of this in; treat green as worth a look, not a lock.</div>
+    <div class="legend"><span><i style="background:var(--green)"></i>Take</span><span><i style="background:var(--ink-2)"></i>Neutral</span><span><i style="background:var(--orange)"></i>Risky</span><span>Bars under "Last 10 games": filled means he got a hit that game</span></div>
+    <div class="foot">Targets are hitters who were favored before the game, have no hit yet, and are priced better than they were pregame. Whether he bats again is based on the lineup, who's up now, the outs, and the score.</div>
   </section>
 
   <section id="board">
@@ -239,20 +240,20 @@
     </div>
     <div id="move-top"></div>
     <div class="grid" id="move-games"></div>
-    <div class="legend"><span><i style="background:var(--green)"></i>More favored since opening</span><span><i style="background:var(--red)"></i>Less favored</span></div>
+    <div class="legend"><span><i style="background:var(--green)"></i>More favored than it opened</span><span><i style="background:var(--red)"></i>Less favored than it opened</span></div>
     <div id="rep-block"></div>
   </section>
 
   <section id="pitch">
     <p class="kicker" id="pitch-meta"></p>
     <div class="grid" id="pitch-games"></div>
-    <div class="legend"><span>Hittable / tough comes from hits per 9, average against, strikeouts per 9 and the last three starts.</span></div>
+    <div class="legend"><span>Hittable or tough is based on hits allowed, batting average against, strikeouts, and the last three starts.</span></div>
   </section>
   <section id="parlay">
     <p class="kicker" id="parlay-meta"></p>
     <div class="bar" id="parlay-bar" style="display:none"><div class="seg" id="parlay-seg"><button data-f="3" class="on">3 players</button><button data-f="4">4 players</button><button data-f="5">5 players</button><button data-f="6">6 players</button></div></div>
     <div id="parlay-out"></div>
-    <div class="foot">Legs qualify when the hitter was favored before the game (-150 or better), has no hit yet, the game is in the 3rd through 6th inning, his spot in the order is due to come up again, and he isn't rated risky. One per game where possible — two from the same game become a same-game parlay on FanDuel. The percentage is our estimate of each player getting a hit from here, not the book's. FanDuel sets the parlay price; this page only picks the players.</div>
+    <div class="foot">A hitter qualifies when he was favored before the game (-150 or better), has no hit yet, the game is in the 3rd through 6th inning, and his spot in the order is coming up again. The percentage is our estimate, not FanDuel's. FanDuel sets the parlay price; this page only picks the players.</div>
   </section>
 </main>
 
@@ -265,6 +266,14 @@ const ago = iso => { const m = Math.round((Date.now() - new Date(iso)) / 60000);
 const stripPitchers = e => String(e).replace(/\s*\([^)]*\)/g, '');
 const teamsOf = e => { const m = stripPitchers(e).split(/\s*@\s*/); return { away: m[0] || '', home: m[1] || '' }; };
 const nick = n => n.split(' ').slice(-1)[0] === 'Sox' || n.split(' ').slice(-1)[0] === 'Jays' ? n.split(' ').slice(-2).join(' ') : n.split(' ').slice(-1)[0];
+const fmtIP = ip => { const [a, b] = String(ip).split('.'); return b === '1' ? `${a}⅓` : b === '2' ? `${a}⅔` : a; };
+const ordinal = n => n + (n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th');
+const l10Text = r => { const l = l10n(r); return l ? `Hit in ${l[0]} of last ${l[1]}` : ''; };
+const streakText = r => r.streak == null ? '' : r.streak >= 2 ? `${r.streak}-game hit streak` : r.streak === 1 ? 'Hit yesterday' : 'No hit streak';
+const againText = r => { const a = r.again; if (!a || a.verdict === 'unknown') return ''; const where = a.up_in == null ? '' : a.up_in === 0 ? 'at the plate' : a.up_in === 1 ? 'on deck' : `${a.up_in} batters away`; return `${AGAIN[a.verdict]}${where ? ` — ${ordinal(a.slot)} in the order, ${where}` : ''}`; };
+const shortEvent = ev => { const t = teamsOf(ev); return `${nick(t.away)} @ ${nick(t.home)}`; };
+const armWord = r => { const a = r.cur_p || r.opp_sp; return a?.name ? `Facing ${lastName(a.name)}${a.rating ? ` (<span class="rate-${a.rating}">${a.rating}</span>)` : ''}` : ''; };
+const formWords = r => { const p = []; const st = streakText(r); if (st) p.push(r.streak >= 3 ? `<b>${st}</b>` : st); const l = l10Text(r); if (l) p.push(l); return p.join(' · '); };
 const when = iso => iso ? new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
 const inningWords = t => { if (!t) return ''; return t.replace(/^(Top|Bottom|Middle|End)\s+(\d+\w\w)$/, (m, a, b) => ({ Top: 'Top of the', Bottom: 'Bottom of the', Middle: 'Middle of the', End: 'End of the' })[a] + ' ' + b); };
 const inningNum = t => { const m = /(\d+)/.exec(t || ''); return m ? +m[1] : null; };
@@ -274,7 +283,7 @@ const F = { live: 'targets', board: 'all', move: 'all', parlay: '3' };
 async function get(p) { try { const r = await fetch(p + '?t=' + Date.now(), { cache: 'no-store' }); return r.ok ? await r.json() : null; } catch { return null; } }
 
 /* ---------- bats again ---------- */
-const AGAIN = { yes: 'Bats again', likely: 'Likely bats again', maybe: 'May not bat again', unlikely: 'Probably done for the day', unknown: '' };
+const AGAIN = { yes: 'Will bat again', likely: 'Should bat again', maybe: 'Might not bat again', unlikely: 'Probably done for the day', unknown: '' };
 function tripsFromAgain(a) {
   if (!a || a.team_pa_left == null || a.up_in == null) return null;
   let trips = 0, rem = a.team_pa_left - a.up_in;
@@ -285,7 +294,8 @@ function againHtml(r, inn) {
   const a = r.again; if (!a || a.verdict === 'unknown') return '';
   const late = (inn ?? 0) >= 7 || a.verdict === 'maybe' || a.verdict === 'unlikely';
   const cls = a.verdict === 'unlikely' ? 'rate-tough' : a.verdict === 'maybe' ? 'rate-ok' : late ? 'rate-hittable' : '';
-  return `<div class="again"><span class="${cls}" style="font-weight:600">${AGAIN[a.verdict]}</span><span> · ${esc(a.note)}</span></div>`;
+  const where = a.up_in == null ? '' : a.up_in === 0 ? 'at the plate now' : a.up_in === 1 ? 'on deck' : `${a.up_in} batters away`;
+  return `<div class="again"><span class="${cls}" style="font-weight:600">${AGAIN[a.verdict]}</span><span>${a.slot ? ` — ${ordinal(a.slot)} in the order${where ? ', ' + where : ''}` : ''}</span></div>`;
 }
 
 /* ---------- verdicts ---------- */
@@ -386,33 +396,33 @@ function playerRow(r, v, opts = {}) {
 function tile(r, v, opts = {}) {
   const pre = opts.preKey ? r[opts.preKey] : r.pre;
   const l = l10n(r);
+  const trips = r.pa != null ? `${r.pa} trip${r.pa === 1 ? '' : 's'} to the plate${r.bb ? `, ${r.bb} walk${r.bb === 1 ? '' : 's'}` : ''}` : '';
   const f1 = r.hits != null
-    ? `<div class="fact"><div class="k">Today</div><div class="v">${r.hits}-${r.ab}${r.pa != null ? ` <small>${r.pa} PA${r.bb ? `, ${r.bb} BB` : ''}</small>` : ''}</div></div>`
+    ? `<div class="fact"><div class="k">Today</div><div class="v">${r.hits} for ${r.ab}</div>${trips ? `<div class="s">${trips}</div>` : ''}</div>`
     : `<div class="fact"><div class="k">First pitch</div><div class="v">${when(r.start) || '—'}</div></div>`;
-  const f2 = `<div class="fact"><div class="k">Hit streak</div><div class="v">${r.streak == null ? '—' : r.streak === 0 ? '<small>none</small>' : `${r.streak} <small>game${r.streak === 1 ? '' : 's'}</small>`}</div></div>`;
-  const f3 = `<div class="fact"><div class="k">Last 10</div><div class="v">${l ? l[0] + '/' + l[1] : '—'}${dots(r)}</div></div>`;
+  const f2 = `<div class="fact"><div class="k">Hit streak</div><div class="v">${r.streak == null ? '—' : r.streak === 0 ? 'None' : `${r.streak} game${r.streak === 1 ? '' : 's'}`}</div></div>`;
+  const f3 = `<div class="fact"><div class="k">Last 10 games</div><div class="v">${l ? `${l[0]} with a hit` : '—'}</div>${dots(r) ? `<div class="s">${dots(r)}</div>` : ''}</div>`;
   const arm = r.cur_p || r.opp_sp || (r.sp ? { name: r.sp, ...(r.sp_form || {}) } : null);
   let match = '';
   if (arm && arm.name) {
     const t = r.cur_p?.tonight || {};
     const rating = arm.rating ? `<span class="tag rate-${arm.rating}">${arm.rating[0].toUpperCase() + arm.rating.slice(1)}</span>` : '';
     const line1 = r.sp_out
-      ? `<div class="l">Now pitching ${esc(arm.name)}${rating}<span> · relief${r.opp_sp?.name ? `, started ${esc(lastName(r.opp_sp.name))}` : ''}</span></div>`
-      : `<div class="l">vs ${esc(arm.name)}${rating}</div>`;
+      ? `<div class="l">Now facing ${esc(arm.name)}${rating}<span> — reliever${r.opp_sp?.name ? `, replaced ${esc(lastName(r.opp_sp.name))}` : ''}</span></div>`
+      : `<div class="l">Facing ${esc(arm.name)}${rating}</div>`;
     const bits = [];
-    if (arm.h9 != null) bits.push(`${arm.h9} H/9`);
-    if (arm.baa) bits.push(`${String(arm.baa).replace(/^0/, '')} BAA`);
-    if (arm.k9 != null) bits.push(`${arm.k9} K/9`);
-    if (t.ip != null) bits.push(`${t.h ?? 0} H in ${t.ip} IP tonight${t.pitches ? `, ${t.pitches} pitches${!r.sp_out && t.pitches >= 85 ? ' — near the hook' : ''}` : ''}`);
+    if (arm.h9 != null) bits.push(`Allows ${arm.h9} hits per 9 innings`);
+    if (arm.baa) bits.push(`hitters bat ${String(arm.baa).replace(/^0/, '')} against him`);
+    if (t.ip != null) bits.push(`${t.h ?? 0} hit${t.h === 1 ? '' : 's'} in ${fmtIP(t.ip)} innings tonight${t.pitches ? ` on ${t.pitches} pitches${!r.sp_out && t.pitches >= 85 ? ' — likely coming out soon' : ''}` : ''}`);
     const b = r.bvp, p = r.opp_pen;
     const bits2 = [];
-    if (b && b.ab) bits2.push(`Career ${b.h}-for-${b.ab}${b.hr ? `, ${b.hr} HR` : ''} vs him${b.pa < 10 ? ' (small sample)' : ''}`);
+    if (b && b.ab) bits2.push(`Career against him: ${b.h} for ${b.ab}${b.hr ? `, ${b.hr} homer${b.hr === 1 ? '' : 's'}` : ''}${b.pa < 10 ? ' (small sample)' : ''}`);
     if (p) {
       const dn = p.top_down || [], okk = p.top_ok || [];
-      const detail = p.health === 'taxed' ? ` — best arms ${dn.map(lastName).join(', ')} likely down` : dn.length ? ` — ${lastName(dn[0])} likely down` : okk.length ? ` — ${okk.slice(0, 2).map(lastName).join(', ')} available` : '';
-      bits2.push(`Bullpen <span class="rate-${p.health}" style="font-weight:600">${p.health}</span>${detail}`);
+      const detail = p.health === 'taxed' ? ` — best arms ${dn.map(lastName).join(', ')} likely unavailable` : dn.length ? ` — ${lastName(dn[0])} likely unavailable` : okk.length ? ` — ${okk.slice(0, 2).map(lastName).join(' and ')} available` : '';
+      bits2.push(`Their bullpen is <span class="rate-${p.health}" style="font-weight:600">${p.health}</span>${detail}`);
     }
-    match = `<div class="match">${line1}<div>${bits.join(' · ')}</div>${bits2.length ? `<div>${bits2.join(' · ')}</div>` : ''}</div>`;
+    match = `<div class="match">${line1}<div>${bits.join(' · ')}</div>${bits2.map(x => `<div>${x}</div>`).join('')}</div>`;
   }
   return `<div class="tile ${v}">
     <div class="top"><div class="who"><div class="team">${esc(r.team || '')}</div><div class="name">${esc(r.player)}</div></div>${oddsBox(v, r.odds, r.hits != null ? pre : (opts.preKey ? pre : null))}</div>
@@ -444,7 +454,7 @@ function card(ev, rowsHtml, meta, start) {
 
 function picksBox(list, title, sub, ctxOf) {
   if (!list.length) return '';
-  return `<div class="picks"><h2>${title}</h2><p>${sub}</p><div class="pick-grid">${list.map(({ r, v }) => `<div class="pick"><div class="mid"><div class="nm"><span>${esc(r.team || '')}</span>${esc(r.player)}</div><div class="ctx">${ctxOf(r)}</div></div>${r.hits != null ? `<div class="today">${r.hits}-${r.ab}${r.pa != null ? `, ${r.pa} PA` : ''}</div>` : ''}<div class="price"><div class="now">${odds(r.odds)}</div>${r.pre != null && r.pre !== r.odds ? `<div class="was">was ${odds(r.pre)}</div>` : ''}</div></div>`).join('')}</div></div>`;
+  return `<div class="picks"><h2>${title}</h2><p>${sub}</p><div class="pick-grid">${list.map(({ r, v }) => `<div class="pick"><div class="mid"><div class="nm"><span>${esc(r.team || '')}</span>${esc(r.player)}</div><div class="ctx">${ctxOf(r)}</div></div>${r.hits != null ? `<div class="today">${r.hits} for ${r.ab}</div>` : ''}<div class="price"><div class="now">${odds(r.odds)}</div>${r.pre != null && r.pre !== r.odds ? `<div class="was">was ${odds(r.pre)}</div>` : ''}</div></div>`).join('')}</div></div>`;
 }
 
 const groupBy = (xs, k) => { const m = new Map(); for (const x of xs) { const kk = k(x); (m.get(kk) || m.set(kk, []).get(kk)).push(x); } return m; };
@@ -458,14 +468,14 @@ function renderLive() {
   $('#n-live').textContent = d?.rows?.filter(isTarget).length ?? 0;
   if (!d?.rows?.length) {
     const nx = d?.next_start ? new Date(d.next_start) : null;
-    const nxt = nx ? `Next first pitch ${nx.toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}.` : '';
+    const nxt = nx ? `Next game starts ${nx.toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}.` : '';
     const ip = d?.in_progress_no_lines || [];
-    const ipHtml = ip.length ? `<div class="closed"><div class="t">${ip.length === 1 ? 'A game is' : ip.length + ' games are'} still in progress, but FanDuel has no hit lines posted</div><div class="s">They close the "to record a hit" markets in the late innings.</div>${ip.map(g => `<div class="g"><span>${esc(g.away_name || g.away)} ${g.away_runs ?? ''} – ${g.home_runs ?? ''} ${esc(g.home_name || g.home)}</span><span class="inn">${esc(inningWords(g.inning))}</span></div>`).join('')}</div>` : '';
+    const ipHtml = ip.length ? `<div class="closed"><div class="t">${ip.length === 1 ? 'One game is' : ip.length + ' games are'} still going, but FanDuel has taken the hit lines down</div><div class="s">They pull these markets in the late innings.</div>${ip.map(g => `<div class="g"><span>${esc(g.away_name || g.away)} ${g.away_runs ?? ''} – ${g.home_runs ?? ''} ${esc(g.home_name || g.home)}</span><span class="inn">${esc(inningWords(g.inning))}</span></div>`).join('')}</div>` : '';
     $('#live-picks').innerHTML = ''; $('#live-games').innerHTML = ipHtml + `<div class="empty">${ip.length ? '' : 'No games in progress right now.<br>'}<span style="font-size:13px">${nxt}</span></div>`; $('#live-note').textContent = ''; return; }
   const withV = d.rows.map(r => ({ r, v: verdictLive(r, d.games?.[r.event]) }));
   const takes = withV.filter(x => x.v === 'take' && isTarget(x.r)).sort((a, b) => (b.r.odds - b.r.pre) - (a.r.odds - a.r.pre));
-  $('#live-picks').innerHTML = picksBox(takes, 'Best spots right now', 'Favored before the game, still hitless, at-bats left, price has moved your way.',
-    r => `${esc(inningWords(d.games?.[r.event]?.inning || r.inning))}${r.streak >= 3 ? ' · ' + r.streak + '-game streak' : ''}`);
+  $('#live-picks').innerHTML = picksBox(takes, 'Best spots right now', 'Favored before the game, no hit yet, more trips coming, and a better price than pregame.',
+    r => [`${esc(shortEvent(r.event))}, ${esc(inningWords(d.games?.[r.event]?.inning || r.inning)).toLowerCase()}`, r.streak >= 3 ? `<b>${streakText(r)}</b>` : l10Text(r), r.again?.verdict && r.again.verdict !== 'unknown' ? AGAIN[r.again.verdict].toLowerCase() : ''].filter(Boolean).join(' · '));
   const keep = withV.filter(({ r }) => matchQ(r, q) && (f === 'all' || (f === 'targets' && isTarget(r)) || (f === 'streak' && r.streak >= 3 && r.hits === 0)));
   const order = { take: 0, neutral: 1, risky: 2, dead: 3 };
   const innOf = ev => inningNum(d.games?.[ev]?.inning) ?? 99;
@@ -475,8 +485,8 @@ function renderLive() {
     cards.push(gameSection(ev, xs.map(({ r, v }) => tile(r, v)).join(''), d.games?.[ev], xs[0].r.start));
   }
   const noPre = f === 'targets' && d.rows.some(r => r.pre == null && r.hits === 0);
-  $('#live-note').textContent = noPre ? 'Some hitless players are hidden because no pregame line was captured for them yet (they show under Everyone).' : '';
-  $('#live-games').innerHTML = cards.join('') || (f === 'targets' ? '<div class="empty">No favored hitters are still hitless with a better price right now.</div>' : '<div class="empty">Nothing matches.</div>');
+  $('#live-note').textContent = noPre ? 'A few hitless players are hidden because we never captured a pregame price for them. They show under Everyone.' : '';
+  $('#live-games').innerHTML = cards.join('') || (f === 'targets' ? '<div class="empty">No favored hitters are hitless at a better price right now.</div>' : '<div class="empty">Nothing matches.</div>');
 }
 function renderBoard() {
   const d = DATA.board, q = ($('#board-q').value || '').toLowerCase(), f = F.board;
@@ -486,8 +496,8 @@ function renderBoard() {
   const upcoming = d.lines.filter(l => !l.start || new Date(l.start) > now - 4 * 3600e3);
   const withV = upcoming.map(r => ({ r, v: verdictPre(r) }));
   const takes = withV.filter(x => x.v === 'take').sort((a, b) => a.r.odds - b.r.odds).slice(0, 12);
-  $('#board-picks').innerHTML = picksBox(takes, 'Strongest pregame spots', 'Priced -250 or better with decent form, or on a 5+ game streak.',
-    r => `${esc(stripPitchers(r.event))} · ${when(r.start)}${r.streak >= 3 ? ' · ' + r.streak + '-game streak' : ''}`);
+  $('#board-picks').innerHTML = picksBox(takes, 'Strongest pregame spots', 'Priced -250 or better, or on a hit streak of five or more. These are the names to watch once the games start.',
+    r => [`${esc(shortEvent(r.event))}, ${when(r.start)}`, r.streak >= 3 ? `<b>${streakText(r)}</b>` : l10Text(r), r.opp_sp?.name ? `facing ${lastName(r.opp_sp.name)}${r.opp_sp.rating ? ` (<span class="rate-${r.opp_sp.rating}">${r.opp_sp.rating}</span>)` : ''}` : ''].filter(Boolean).join(' · '));
   const keep = withV.filter(({ r, v }) => matchQ(r, q) && (f === 'all' || (f === 'take' && v === 'take') || (f === 'streak' && r.streak >= 3)));
   const games = [...groupBy(keep, x => x.r.event)].sort((a, b) => (a[1][0].r.start || '').localeCompare(b[1][0].r.start || ''));
   $('#board-games').innerHTML = games.map(([ev, xs]) => { xs.sort((a, b) => a.r.odds - b.r.odds); return gameSection(ev, xs.map(({ r, v }) => tile(r, v, { preLabel: 'Line' })).join(''), null, xs[0].r.start); }).join('') || '<div class="empty">Nothing matches.</div>';
@@ -504,10 +514,11 @@ function spark(points) {
 }
 function moveRow(m) {
   const d = m.now - m.open, cls = d < 0 ? 'up' : d > 0 ? 'down' : 'flat';
-  const rng = m.min !== m.max ? `${odds(m.min)} to ${odds(m.max)} · ${m.points.length - 1} change${m.points.length - 1 === 1 ? '' : 's'}` : 'no movement yet';
+  const nCh = m.points.length - 1;
+  const rng = nCh ? `Opened ${odds(m.open)} · moved ${nCh} time${nCh === 1 ? '' : 's'} · low ${odds(m.min)}, high ${odds(m.max)}` : `Opened ${odds(m.open)} · no movement yet`;
   return `<div class="mv">
-    <div class="who"><div class="name"><span class="team">${esc(m.team || '')}</span>${esc(m.player)}${m.streak >= 3 ? ` <span class="team">· ${m.streak}-game streak</span>` : ''}</div></div>
-    <div class="od"><div class="oddsline"><small>${odds(m.open)} →</small> ${odds(m.now)}</div><div class="delta ${cls}">${d ? (d < 0 ? 'more favored ' : 'less favored ') + (d > 0 ? '+' : '') + d : 'unchanged'}</div></div>
+    <div class="who"><div class="name"><span class="team">${esc(m.team || '')}</span>${esc(m.player)}${m.streak >= 3 ? ` <span class="team">· ${m.streak}-game hit streak</span>` : ''}</div></div>
+    <div class="od"><div class="oddsline">${odds(m.now)}</div><div class="delta ${cls}">${d ? (d < 0 ? `${Math.abs(d)} points more favored` : `${d} points less favored`) : 'Unchanged'}</div></div>
     <div class="rng">${spark(m.points)}<span>${rng}</span></div>
   </div>`;
 }
@@ -520,7 +531,7 @@ function renderMove() {
   const now = Date.now();
   const pregame = m => !m.start || new Date(m.start) > now;
   const movers = rows.filter(m => pregame(m) && m.now < m.open).sort((a, b) => (a.now - a.open) - (b.now - b.open)).slice(0, 10);
-  $('#move-top').innerHTML = movers.length ? `<div class="picks"><h2>Getting more favored</h2><p>Pregame lines that have shortened since they opened — the market leaning into these hitters. Once a game starts, its prices move to the Live tab.</p><div class="card">${movers.map(moveRow).join('')}</div></div>` : '<div class="picks"><h2>Getting more favored</h2><p>No pregame lines have shortened yet today.</p></div>';
+  $('#move-top').innerHTML = movers.length ? `<div class="picks"><h2>Getting more favored</h2><p>Pregame lines that have gotten more favored since they opened. Once a game starts, its prices move to the Live tab.</p><div class="card">${movers.map(moveRow).join('')}</div></div>` : '<div class="picks"><h2>Getting more favored</h2><p>No pregame lines have shortened yet today.</p></div>';
   const keep = rows.filter(m => matchQ(m, q) && (f === 'all' || (f === 'live' && liveEv.has(m.event)) || (f === 'movers' && m.now < m.open)));
   const games = [...groupBy(keep, m => m.event)].sort((a, b) => (a[1][0].start || '').localeCompare(b[1][0].start || ''));
   $('#move-games').innerHTML = games.map(([ev, ms]) => { ms.sort((a, b) => (a.now - a.open) - (b.now - b.open)); return card(ev, ms.map(moveRow).join(''), DATA.live?.games?.[ev], ms[0].start); }).join('') || '<div class="empty">Nothing matches.</div>';
@@ -539,21 +550,22 @@ function penBlock(pen) {
   const top = arms.filter(a => a.top), used = arms.filter(a => a.yesterday || a.two_days);
   const show = [...new Map([...top, ...used].map(a => [a.name, a])).values()];
   const down = pen.top_down || [], ok = pen.top_ok || [];
-  const why = pen.health === 'taxed' ? `${down.length} of their 4 best arms likely down (${down.map(lastName).join(', ')}) — expect weaker relief late`
-    : pen.health === 'fresh' ? `best arms rested${ok.length ? ` (${ok.map(lastName).join(', ')} available)` : ''}`
-    : down.length ? `${lastName(down[0])} likely down; ${ok.length ? ok.map(lastName).join(', ') + ' available' : 'others limited'}`
-    : `moderate use, best arms available`;
-  const status = a => a.status === 'down' ? '<span class="st-down">Likely down</span>' : a.status === 'limited' ? '<span class="st-lim">Limited</span>' : '<span class="st-ok">Fresh</span>';
-  const table = show.length ? `<table class="pen-t"><thead><tr><th>Reliever</th><th>Avg against</th><th>Yesterday</th><th>2 days ago</th><th>Status</th></tr></thead><tbody>${show.map(a => `<tr><td>${esc(a.name)}${a.top ? ' <span class="topmark">top</span>' : ''}</td><td>${a.avg ? String(a.avg).replace(/^0/, '') : '—'}</td><td>${a.yesterday ? a.yesterday + ' p' : '—'}</td><td>${a.two_days ? a.two_days + ' p' : '—'}</td><td>${status(a)}</td></tr>`).join('')}</tbody></table>` : '<div class="pen-s">No reliever data yet.</div>';
+  const why = pen.health === 'taxed' ? `${down.length} of their four best relievers are likely unavailable (${down.map(lastName).join(', ')}), so expect weaker arms late`
+    : pen.health === 'fresh' ? `best relievers are rested${ok.length ? ` (${ok.map(lastName).join(', ')} available)` : ''}`
+    : down.length ? `${lastName(down[0])} is likely unavailable; ${ok.length ? ok.map(lastName).join(', ') + ' available' : 'the rest have worked recently'}`
+    : `worked a bit lately, but the best arms are available`;
+  const status = a => a.status === 'down' ? '<span class="st-down">Likely unavailable</span>' : a.status === 'limited' ? '<span class="st-lim">Available, worked recently</span>' : '<span class="st-ok">Fresh</span>';
+  const table = show.length ? `<table class="pen-t"><thead><tr><th>Reliever</th><th>Hitters bat</th><th>Yesterday</th><th>Day before</th><th>Today</th></tr></thead><tbody>${show.map(a => `<tr><td>${esc(a.name)}${a.top ? ' <span class="topmark">top 4</span>' : ''}</td><td>${a.avg ? String(a.avg).replace(/^0/, '') : '—'}</td><td>${a.yesterday ? a.yesterday + ' pitches' : 'Rested'}</td><td>${a.two_days ? a.two_days + ' pitches' : 'Rested'}</td><td>${status(a)}</td></tr>`).join('')}</tbody></table>` : '<div class="pen-s">No reliever data yet.</div>';
   return `<div class="pen"><div class="pen-h">Bullpen <span class="rate-${pen.health}">${pen.health}</span> <span class="why">· ${why}</span></div>${table}</div>`;
 }
 function armBlock(label, p, pen, team) {
-  const st = p ? `<div class="stats"><b>${p.h9 ?? '?'}</b> hits per 9 · <b>${p.baa ? String(p.baa).replace(/^0/, '') : '?'}</b> avg against · <b>${p.k9 ?? '?'}</b> K per 9 · ERA ${p.era ?? '?'}${p.last3?.length ? `<br>Last 3 starts (hits / innings): ${p.last3.map(x => x.replace('H/', ' H in ').replace('IP', ' IP')).join(', ')}` : ''}${p.ip != null && p.ip < 40 ? '<br>Few innings this season — rating is low-confidence' : ''}</div>` : '<div class="stats">No probable starter listed yet.</div>';
+  const l3 = (p?.last3 || []).map(x => { const m = /^(\d+)H\/([\d.]+)IP$/.exec(x); return m ? `${m[1]} hit${m[1] === '1' ? '' : 's'} in ${fmtIP(m[2])}` : x; });
+  const st = p ? `<div class="stats">Allows <b>${p.h9 ?? '?'}</b> hits per 9 innings · hitters bat <b>${p.baa ? String(p.baa).replace(/^0/, '') : '?'}</b> against him · <b>${p.k9 ?? '?'}</b> strikeouts per 9 · <b>${p.era ?? '?'}</b> ERA${l3.length ? `<br>Last three starts: ${l3.join(', ')}` : ''}${p.ip != null && p.ip < 40 ? '<br>Few innings this season, so the rating is a rough read' : ''}</div>` : '<div class="stats">No probable starter listed yet.</div>';
   return `<div class="arm"><div class="hd"><div class="nm">${p ? esc(p.name) : 'TBD'}<small>${esc(team || '')} · ${label}</small></div>${p?.rating ? `<span class="rating rate-${p.rating}">${p.rating[0].toUpperCase() + p.rating.slice(1)}</span>` : ''}</div>${st}${penBlock(pen)}</div>`;
 }
 function renderPitch() {
   const d = DATA.pitch; const games = d?.games || []; $('#n-pitch').textContent = games.length;
-  $('#pitch-meta').textContent = games.length ? `Probable starters with season rates, and each bullpen's availability. "Top" = the team's four best relievers by average against. Likely down = pitched both of the last two days or 30+ pitches yesterday; limited = 20+ pitches yesterday (about half a mph off). What matters for a hitter is whether the good arms are available late.` : 'No pitcher data yet.';
+  $('#pitch-meta').textContent = games.length ? `Tonight's starters and how rested each bullpen is. "Top 4" marks the team's four best relievers. A reliever is likely unavailable after pitching two days in a row or throwing 30+ pitches yesterday. What matters for a hitter is whether the good arms are around late in the game.` : 'No pitcher data yet.';
   $('#pitch-games').innerHTML = games.map(g => card(g.event, armBlock('away starter', g.away_sp, g.away_pen, g.away) + armBlock('home starter', g.home_sp, g.home_pen, g.home), DATA.live?.games?.[g.event], g.start)).join('');
 }
 /* ---------- live parlay builder ---------- */
@@ -573,12 +585,12 @@ function legModel(r, meta) {
   let perPA = 1 - Math.pow(1 - pPre, 1 / PA_PREGAME);       // per-trip hit chance implied by that
   const arm = r.cur_p || r.opp_sp, l = l10n(r), l10r = l ? l[0] / Math.max(1, l[1]) : null;
   const notes = [];
-  if (arm?.rating === 'hittable') { perPA *= 1.08; notes.push(`${lastName(arm.name)} is hittable`); }
-  if (arm?.rating === 'tough') { perPA *= 0.92; notes.push(`${lastName(arm.name)} is tough`); }
-  if (r.streak >= 5) { perPA *= 1.05; notes.push(`${r.streak}-game streak`); }
-  if (l10r != null && l10r <= 0.4) { perPA *= 0.95; notes.push(`cold last 10 (${r.last10})`); }
-  if (r.bvp && r.bvp.pa >= 10) { const a = parseFloat(r.bvp.avg); if (a >= .300) { perPA *= 1.05; notes.push(`hits him (${r.bvp.h}-for-${r.bvp.ab})`); } else if (a <= .150) { perPA *= 0.95; notes.push(`struggles vs him (${r.bvp.h}-for-${r.bvp.ab})`); } }
-  if (r.opp_pen?.health === 'taxed') { perPA *= 1.03; notes.push('weak relief coming'); }
+  if (arm?.rating === 'hittable') { perPA *= 1.08; notes.push(`facing a hittable arm (${lastName(arm.name)})`); }
+  if (arm?.rating === 'tough') { perPA *= 0.92; notes.push(`facing a tough arm (${lastName(arm.name)})`); }
+  if (r.streak >= 5) { perPA *= 1.05; notes.push(`${r.streak}-game hit streak`); }
+  if (l10r != null && l10r <= 0.4) { perPA *= 0.95; notes.push(`cold lately (hit in ${l[0]} of last 10)`); }
+  if (r.bvp && r.bvp.pa >= 10) { const a = parseFloat(r.bvp.avg); if (a >= .300) { perPA *= 1.05; notes.push(`${r.bvp.h} for ${r.bvp.ab} career against him`); } else if (a <= .150) { perPA *= 0.95; notes.push(`${r.bvp.h} for ${r.bvp.ab} career against him`); } }
+  if (r.opp_pen?.health === 'taxed') { perPA *= 1.03; notes.push('their bullpen is taxed'); }
   const fromLineup = tripsFromAgain(r.again);
   const left = fromLineup != null ? Math.min(remainingPA(inn, r.pa), fromLineup + 0.15) : remainingPA(inn, r.pa);
   const p = 1 - Math.pow(1 - Math.min(0.6, perPA), left);
@@ -611,20 +623,20 @@ function renderParlay() {
   if (games < 2) {
     bar.style.display = 'none';
     $('#parlay-meta').textContent = '';
-    $('#parlay-out').innerHTML = `<div class="empty">${legs.length ? 'Only one game has qualifying hitters right now — the builder needs at least two live games in the 3rd–6th inning.' : 'No qualifying hitters right now. Legs appear once games reach the 3rd inning with favored hitters still hitless.'}</div>`;
+    $('#parlay-out').innerHTML = `<div class="empty">${legs.length ? 'Only one game has qualifying hitters right now. This needs at least two live games in the 3rd through 6th inning.' : 'Nobody qualifies right now. Hitters show up here once games reach the 3rd inning with favored hitters still hitless.'}</div>`;
     return;
   }
   bar.style.display = '';
-  $('#parlay-meta').textContent = `${legs.length} qualifying hitter${legs.length === 1 ? '' : 's'} across ${games} live game${games === 1 ? '' : 's'}, ranked by estimated chance of getting a hit from here. All odds are FanDuel's current live prices.`;
+  $('#parlay-meta').textContent = `${legs.length} hitter${legs.length === 1 ? '' : 's'} qualify across ${games} live games, ranked by their chance of getting a hit from here. Odds are FanDuel's live prices as of the last pull.`;
   const chosen = pickParlay(legs, n);
   if (chosen.length < n) { $('#parlay-out').innerHTML = `<div class="empty">Only ${chosen.length} qualifying player${chosen.length === 1 ? '' : 's'} right now — try a smaller group.</div>`; return; }
   const sameGame = chosen.length - new Set(chosen.map(x => x.r.event)).size;
-  const legHtml = chosen.map((x, i) => `<div class="leg"><div class="n">${i + 1}</div><div><div class="nm">${esc(x.r.player)}<span>${esc(x.r.team || '')} · ${esc(inningWords(x.meta?.inning || x.r.inning))} · ${x.r.hits}-${x.r.ab}${x.r.pa != null ? `, ${x.r.pa} PA` : ''}</span></div><div class="why"><b>about ${Math.round(x.m.left * 10) / 10} trips left</b>${x.r.again?.note ? ` (${esc(x.r.again.note.split(';')[0])})` : ''} · est. <b>${Math.round(x.m.p * 100)}%</b> to get a hit${x.m.notes.length ? ' · ' + x.m.notes.join(' · ') : ''}</div></div><div class="od"><div class="o">${odds(x.r.odds)}</div><div class="pr">was ${odds(x.r.pre)}</div></div></div>`).join('');
+  const legHtml = chosen.map((x, i) => `<div class="leg"><div class="n">${i + 1}</div><div><div class="nm">${esc(x.r.player)}<span>${esc(x.r.team || '')} · ${esc(inningWords(x.meta?.inning || x.r.inning))} · ${x.r.hits} for ${x.r.ab}${x.r.pa != null ? `, ${x.r.pa} trip${x.r.pa === 1 ? '' : 's'}` : ''}</span></div><div class="why"><b>${Math.round(x.m.p * 100)}% to get a hit from here</b> · about ${Math.round(x.m.left) || 1} more trip${Math.round(x.m.left) === 1 ? '' : 's'}${x.r.again?.slot ? ` · ${ordinal(x.r.again.slot)} in the order${x.r.again.up_in != null ? `, ${x.r.again.up_in === 0 ? 'at the plate' : x.r.again.up_in === 1 ? 'on deck' : x.r.again.up_in + ' batters away'}` : ''}` : ''}${x.m.notes.length ? ' · ' + x.m.notes.join(' · ') : ''}</div></div><div class="od"><div class="o">${odds(x.r.odds)}</div><div class="pr">was ${odds(x.r.pre)}</div></div></div>`).join('');
   const alts = legs.filter(x => !chosen.includes(x)).slice(0, 4);
   $('#parlay-out').innerHTML = `<div class="parlay">
-    <div class="ph"><div class="t">${n} players</div><div class="src">Odds from FanDuel, as of the last pull · ${sameGame ? `${sameGame + 1} share a game` : 'one per game'} · build it in the FanDuel app for the exact parlay price</div></div>
+    <div class="ph"><div class="t">${n} players</div><div class="src">${sameGame ? `${sameGame + 1} of these are in the same game` : 'One player per game'} · build it in the FanDuel app for the parlay price</div></div>
     ${legHtml}
-    ${alts.length ? `<div class="alts"><b>Next up:</b> ${alts.map(x => `${esc(x.r.player)} ${odds(x.r.odds)} (${Math.round(x.m.p * 100)}%)`).join(' · ')}</div>` : ''}
+    ${alts.length ? `<div class="alts"><b>Next up:</b> ${alts.map(x => `${esc(x.r.player)} ${odds(x.r.odds)}, ${Math.round(x.m.p * 100)}%`).join(' · ')}</div>` : ''}
   </div>`;
 }
 
