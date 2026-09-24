@@ -23,7 +23,6 @@
   .wrap { max-width:1200px; margin:0 auto; padding:0 24px; }
   .hdr-row { display:flex; align-items:center; justify-content:space-between; height:52px; }
   .logo { font-weight:700; font-size:15px; letter-spacing:-.01em; display:flex; align-items:center; gap:8px; }
-  .logo i { width:8px; height:8px; border-radius:50%; background:var(--green); display:inline-block; }
   .status { color:var(--ink-3); font-size:13px; display:flex; align-items:center; gap:6px; }
   .status b { color:var(--ink-2); font-weight:500; }
   .status .dot { width:6px; height:6px; border-radius:50%; background:var(--green); }
@@ -87,8 +86,11 @@
   .match { margin-top:14px; padding-top:12px; border-top:1px solid var(--hair); color:var(--ink-3); font-size:13px; line-height:1.55; }
   .match .l { color:var(--ink); font-weight:500; }
   .match .l span { color:var(--ink-3); font-weight:400; }
-  .match .l .tag { color:var(--ink-2); font-weight:500; }
-  .match .l .tag::before { content:'·'; margin:0 6px; color:var(--ink-3); }
+  .match .l .tag { font-weight:600; }
+  .match .l .tag::before { content:'·'; margin:0 6px; color:var(--ink-3); font-weight:400; }
+  .rate-hittable, .rate-fresh { color:var(--green); }
+  .rate-tough, .rate-taxed { color:var(--orange); }
+  .rate-neutral, .rate-ok { color:var(--ink-2); }
 
   /* ---- best spots ---- */
   .picks { margin-bottom:32px; }
@@ -128,11 +130,20 @@
   .arm .hd { display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
   .arm .nm { font-weight:600; font-size:15px; }
   .arm .nm small { color:var(--ink-3); font-weight:400; font-size:12px; margin-left:8px; }
-  .arm .rating { color:var(--ink-2); font-size:12px; }
+  .arm .rating { font-size:13px; font-weight:600; }
   .arm .stats { color:var(--ink-2); font-size:13px; margin-top:6px; line-height:1.5; }
   .arm .stats b { color:var(--ink); font-weight:600; }
-  .arm .pen { margin-top:8px; color:var(--ink-3); font-size:12.5px; line-height:1.5; }
-  .arm .pen b { color:var(--ink-2); font-weight:500; }
+  .arm .pen { margin-top:12px; padding-top:10px; border-top:1px solid var(--hair); font-size:13px; line-height:1.5; }
+  .arm .pen-h { color:var(--ink); font-weight:600; }
+  .arm .pen-h .why { color:var(--ink-3); font-weight:400; }
+  .arm .pen-s { color:var(--ink-3); margin-top:4px; }
+  .pen-t { width:100%; border-collapse:collapse; margin-top:8px; font-size:12.5px; }
+  .pen-t th { text-align:left; color:var(--ink-3); font-weight:500; padding:2px 0 4px; }
+  .pen-t td { padding:3px 0; color:var(--ink-2); border-top:1px solid var(--hair); }
+  .pen-t th:nth-child(n+2), .pen-t td:nth-child(n+2) { text-align:right; white-space:nowrap; }
+  .pen-t tr.tired td { color:var(--ink); }
+  .pen-t .topmark { color:var(--ink-3); font-size:11px; margin-left:4px; }
+  .st-down { color:var(--orange); font-weight:600; } .st-lim { color:var(--ink-2); } .st-ok { color:var(--green); }
 
   .empty { color:var(--ink-3); padding:48px 10px; text-align:center; }
   .closed { max-width:560px; margin:8px auto 0; background:var(--surface); border:1px solid var(--hair); border-radius:10px; padding:16px 18px; }
@@ -160,7 +171,7 @@
 <body>
 <header class="hdr"><div class="wrap">
   <div class="hdr-row">
-    <div class="logo"><i></i>Hit Tracker</div>
+    <div class="logo">Hit Tracker</div>
     <div class="status" id="status"><span class="dot"></span><span class="lbl">loading…</span></div>
   </div>
   <div class="tabs">
@@ -207,7 +218,7 @@
   <section id="pitch">
     <p class="kicker" id="pitch-meta"></p>
     <div class="grid" id="pitch-games"></div>
-    <div class="legend"><span>Tired = pitched both of the last two days, or 30+ pitches yesterday.</span></div>
+    <div class="legend"><span>Hittable / tough comes from hits per 9, average against, strikeouts per 9 and the last three starts.</span></div>
   </section>
 </main>
 
@@ -333,7 +344,7 @@ function tile(r, v, opts = {}) {
   let match = '';
   if (arm && arm.name) {
     const t = r.cur_p?.tonight || {};
-    const rating = arm.rating ? `<span class="tag">${arm.rating[0].toUpperCase() + arm.rating.slice(1)}</span>` : '';
+    const rating = arm.rating ? `<span class="tag rate-${arm.rating}">${arm.rating[0].toUpperCase() + arm.rating.slice(1)}</span>` : '';
     const line1 = r.sp_out
       ? `<div class="l">Now pitching ${esc(arm.name)}${rating}<span> · relief${r.opp_sp?.name ? `, started ${esc(lastName(r.opp_sp.name))}` : ''}</span></div>`
       : `<div class="l">vs ${esc(arm.name)}${rating}</div>`;
@@ -341,11 +352,15 @@ function tile(r, v, opts = {}) {
     if (arm.h9 != null) bits.push(`${arm.h9} H/9`);
     if (arm.baa) bits.push(`${String(arm.baa).replace(/^0/, '')} BAA`);
     if (arm.k9 != null) bits.push(`${arm.k9} K/9`);
-    if (t.ip != null) bits.push(`${t.h ?? 0} H in ${t.ip} IP tonight${t.pitches ? `, ${t.pitches} pitches` : ''}`);
+    if (t.ip != null) bits.push(`${t.h ?? 0} H in ${t.ip} IP tonight${t.pitches ? `, ${t.pitches} pitches${!r.sp_out && t.pitches >= 85 ? ' — near the hook' : ''}` : ''}`);
     const b = r.bvp, p = r.opp_pen;
     const bits2 = [];
     if (b && b.ab) bits2.push(`Career ${b.h}-for-${b.ab}${b.hr ? `, ${b.hr} HR` : ''} vs him${b.pa < 10 ? ' (small sample)' : ''}`);
-    if (p) bits2.push(`Bullpen ${p.health}${p.tired?.length ? `, ${p.tired.length} tired` : ''}`);
+    if (p) {
+      const dn = p.top_down || [], okk = p.top_ok || [];
+      const detail = p.health === 'taxed' ? ` — best arms ${dn.map(lastName).join(', ')} likely down` : dn.length ? ` — ${lastName(dn[0])} likely down` : okk.length ? ` — ${okk.slice(0, 2).map(lastName).join(', ')} available` : '';
+      bits2.push(`Bullpen <span class="rate-${p.health}" style="font-weight:600">${p.health}</span>${detail}`);
+    }
     match = `<div class="match">${line1}<div>${bits.join(' · ')}</div>${bits2.length ? `<div>${bits2.join(' · ')}</div>` : ''}</div>`;
   }
   return `<div class="tile ${v}">
@@ -465,15 +480,27 @@ function renderReportBlock() {
   const rows = d.rows, moved = rows.filter(r => r.move != null && Math.abs(r.move) >= 20).sort((a, b) => Math.abs(b.move) - Math.abs(a.move)).slice(0, 20);
   el.innerHTML = `<div class="h3">Overnight (11 PM → 11 AM) · ${d.date}</div>` + (moved.length ? `<div class="card">${moved.map(r => playerRow(r, verdictPre(r), { pre: r.prev })).join('')}</div>` : '<div class="empty">No overnight moves of 20+ points.</div>');
 }
-function armBlock(label, p, pen, team) {
-  const st = p ? `<div class="stats"><b>${p.h9 ?? '?'}</b> H/9 · <b>${p.baa ? String(p.baa).replace(/^0/, '') : '?'}</b> BAA · <b>${p.k9 ?? '?'}</b> K/9 · ERA ${p.era ?? '?'}${p.last3?.length ? `<br>Last 3 starts: ${p.last3.join(', ')}` : ''}${p.ip != null && p.ip < 40 ? ' · few innings' : ''}</div>` : '<div class="stats">No probable starter listed yet.</div>';
-  const penHtml = pen ? `<div class="pen"><b>Bullpen ${pen.health}</b> · yesterday: ${pen.yesterday.length ? pen.yesterday.slice(0, 5).map(x => `${lastName(x.name)} ${x.pitches}`).join(', ') : 'none used'}${pen.tired.length ? ` · tired: ${pen.tired.map(lastName).join(', ')}` : ''}</div>` : '<div class="pen">Bullpen usage not available yet.</div>';
-  return `<div class="arm"><div class="hd"><div class="nm">${p ? esc(p.name) : 'TBD'}<small>${esc(team || '')} · ${label}</small></div>${p?.rating ? `<span class="rating">${p.rating[0].toUpperCase() + p.rating.slice(1)}</span>` : ''}</div>${st}${penHtml}</div>`;
+function penBlock(pen) {
+  if (!pen) return '<div class="pen"><div class="pen-h">Bullpen</div><div class="pen-s">Usage not available yet.</div></div>';
+  const arms = pen.arms || [];
+  const top = arms.filter(a => a.top), used = arms.filter(a => a.yesterday || a.two_days);
+  const show = [...new Map([...top, ...used].map(a => [a.name, a])).values()];
+  const down = pen.top_down || [], ok = pen.top_ok || [];
+  const why = pen.health === 'taxed' ? `${down.length} of their 4 best arms likely down (${down.map(lastName).join(', ')}) — expect weaker relief late`
+    : pen.health === 'fresh' ? `best arms rested${ok.length ? ` (${ok.map(lastName).join(', ')} available)` : ''}`
+    : down.length ? `${lastName(down[0])} likely down; ${ok.length ? ok.map(lastName).join(', ') + ' available' : 'others limited'}`
+    : `moderate use, best arms available`;
+  const status = a => a.status === 'down' ? '<span class="st-down">Likely down</span>' : a.status === 'limited' ? '<span class="st-lim">Limited</span>' : '<span class="st-ok">Fresh</span>';
+  const table = show.length ? `<table class="pen-t"><thead><tr><th>Reliever</th><th>Avg against</th><th>Yesterday</th><th>2 days ago</th><th>Status</th></tr></thead><tbody>${show.map(a => `<tr><td>${esc(a.name)}${a.top ? ' <span class="topmark">top</span>' : ''}</td><td>${a.avg ? String(a.avg).replace(/^0/, '') : '—'}</td><td>${a.yesterday ? a.yesterday + ' p' : '—'}</td><td>${a.two_days ? a.two_days + ' p' : '—'}</td><td>${status(a)}</td></tr>`).join('')}</tbody></table>` : '<div class="pen-s">No reliever data yet.</div>';
+  return `<div class="pen"><div class="pen-h">Bullpen <span class="rate-${pen.health}">${pen.health}</span> <span class="why">· ${why}</span></div>${table}</div>`;
 }
-
+function armBlock(label, p, pen, team) {
+  const st = p ? `<div class="stats"><b>${p.h9 ?? '?'}</b> hits per 9 · <b>${p.baa ? String(p.baa).replace(/^0/, '') : '?'}</b> avg against · <b>${p.k9 ?? '?'}</b> K per 9 · ERA ${p.era ?? '?'}${p.last3?.length ? `<br>Last 3 starts (hits / innings): ${p.last3.map(x => x.replace('H/', ' H in ').replace('IP', ' IP')).join(', ')}` : ''}${p.ip != null && p.ip < 40 ? '<br>Few innings this season — rating is low-confidence' : ''}</div>` : '<div class="stats">No probable starter listed yet.</div>';
+  return `<div class="arm"><div class="hd"><div class="nm">${p ? esc(p.name) : 'TBD'}<small>${esc(team || '')} · ${label}</small></div>${p?.rating ? `<span class="rating rate-${p.rating}">${p.rating[0].toUpperCase() + p.rating.slice(1)}</span>` : ''}</div>${st}${penBlock(pen)}</div>`;
+}
 function renderPitch() {
   const d = DATA.pitch; const games = d?.games || []; $('#n-pitch').textContent = games.length;
-  $('#pitch-meta').textContent = games.length ? `Starters and bullpen state for every game on the board. Bullpen = who threw in the last two days.` : 'No pitcher data yet.';
+  $('#pitch-meta').textContent = games.length ? `Probable starters with season rates, and each bullpen's availability. "Top" = the team's four best relievers by average against. Likely down = pitched both of the last two days or 30+ pitches yesterday; limited = 20+ pitches yesterday (about half a mph off). What matters for a hitter is whether the good arms are available late.` : 'No pitcher data yet.';
   $('#pitch-games').innerHTML = games.map(g => card(g.event, armBlock('away starter', g.away_sp, g.away_pen, g.away) + armBlock('home starter', g.home_sp, g.home_pen, g.home), DATA.live?.games?.[g.event], g.start)).join('');
 }
 /* ---------- boot ---------- */
