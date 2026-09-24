@@ -211,6 +211,8 @@ const TEAM_ID = { LAA:108, AZ:109, ARI:109, BAL:110, BOS:111, CHC:112, CIN:113, 
 const ESPN_ABBR = { AZ:'ari', ARI:'ari', CWS:'chw', WSH:'wsh', ATH:'ath', OAK:'oak' };
 const logo = (abbr, px = 20) => { const id = TEAM_ID[abbr]; if (!id) return ''; const espn = (ESPN_ABBR[abbr] || String(abbr).toLowerCase()); return `<img src="https://www.mlbstatic.com/team-logos/${id}.svg" data-alt="https://a.espncdn.com/i/teamlogos/mlb/500/${espn}.png" width="${px}" height="${px}" class="inline-block shrink-0 align-middle" style="width:${px}px;height:${px}px" alt="" loading="lazy" onerror="if(this.dataset.alt){this.src=this.dataset.alt;this.removeAttribute('data-alt')}else{this.style.display='none'}">`; };
 const teamTag = (abbr, px = 18) => `<span class="inline-flex items-center gap-1.5 align-middle">${logo(abbr, px)}<span class="text-xs font-medium text-muted-foreground">${esc(abbr || '')}</span></span>`;
+const PEN_WORD = { fresh: 'Fresh', ok: 'Available', taxed: 'Taxed' };
+const rateWord = (w, kind = 'arm') => { if (!w) return ''; const label = kind === 'pen' ? (PEN_WORD[w] || w) : w[0].toUpperCase() + w.slice(1); return `<span class="rate-${w} text-[11px] font-semibold uppercase tracking-wider">${label}</span>`; };
 const cap = w => w ? w[0].toUpperCase() + w.slice(1) : '';
 function price(v, now, pre, tag = true) {
   const cls = v === 'take' ? 'text-take' : v === 'risky' ? 'text-risky' : v === 'dead' ? 'text-muted-foreground line-through' : 'text-foreground';
@@ -233,13 +235,13 @@ function tile(r, v, opts = {}) {
   const arm = r.cur_p || r.opp_sp || (r.sp ? { name: r.sp, ...(r.sp_form || {}) } : null);
   if (arm && arm.name) {
     const t = r.cur_p?.tonight || {}, bits = [];
-    if (arm.rating) bits.push(`<span class="rate-${arm.rating}">${cap(arm.rating)}</span>`);
+    if (arm.rating) bits.push(rateWord(arm.rating));
     if (r.sp_out) bits.push('reliever');
     if (!r.sp_out && t.pitches >= 85) bits.push('likely out soon');
     if (r.bvp && r.bvp.pa >= 10) bits.push(`${r.bvp.h} for ${r.bvp.ab} against him`);
     rows.push([r.sp_out ? 'Facing now' : 'Pitcher', `${esc(lastName(arm.name))}${bits.length ? ` <span class="m">· ${bits.join(' · ')}</span>` : ''}`]);
   }
-  if (r.opp_pen) { const p = r.opp_pen, dn = p.top_down || []; rows.push(['Bullpen', `<span class="rate-${p.health}">${cap(p.health)}</span>${dn.length ? ` <span class="m">· ${dn.map(lastName).join(', ')} likely out</span>` : ''}`]); }
+  if (r.opp_pen) { const p = r.opp_pen, dn = p.top_down || []; rows.push(['Bullpen', `${rateWord(p.health, 'pen')}${dn.length ? ` <span class="m">· ${dn.map(lastName).join(', ')} likely out</span>` : ''}`]); }
   return `<div class="card px-5 pt-4 pb-1 ${v === 'dead' ? 'opacity-50' : ''}">
     <div class="flex items-start justify-between gap-4 pb-3"><div class="min-w-0"><div class="mb-0.5">${teamTag(r.team, 18)}</div><div class="truncate text-base font-semibold tracking-tight">${esc(r.player)}</div></div>${price(v, r.odds, live ? pre : (opts.preKey ? pre : null))}</div>
     ${kv(rows)}
@@ -286,7 +288,7 @@ function renderLive() {
     $('#live-picks').innerHTML = ''; $('#live-games').innerHTML = ipHtml + empty(`${ip.length ? '' : 'No games in progress right now. '}${nxt}`); $('#live-note').textContent = ''; return; }
   const withV = d.rows.map(r => ({ r, v: verdictLive(r, d.games?.[r.event]) }));
   const gameCell = r => `${esc(shortEvent(r.event))} <span class="text-muted-foreground">· ${esc(inningWords(d.games?.[r.event]?.inning || r.inning))}</span>`;
-  const armCell = r => { const a = r.cur_p || r.opp_sp; return a?.name ? `${esc(lastName(a.name))}${a.rating ? ` <span class="rate-${a.rating}">${a.rating}</span>` : ''}` : '—'; };
+  const armCell = r => { const a = r.cur_p || r.opp_sp; return a?.name ? `${esc(lastName(a.name))}${a.rating ? ` ${rateWord(a.rating)}` : ''}` : '—'; };
   const againCell = r => r.again?.verdict && r.again.verdict !== 'unknown' ? AGAIN[r.again.verdict] : '—';
   const todayCell = r => `<span class="text-foreground whitespace-nowrap">${r.hits} for ${r.ab}</span>${paWords(r) ? `<div class="text-muted-foreground">${paWords(r)}</div>` : ''}`;
   const liveCols = [{ label: 'Game', hide: 'hidden lg:table-cell' }, { label: 'Today', wrap: true }, { label: 'Form', hide: 'hidden lg:table-cell' }, { label: 'Pitcher' }, { label: 'Bats again', hide: 'hidden xl:table-cell' }];
@@ -314,8 +316,8 @@ function renderBoard() {
   if (!d?.lines) { $('#board-games').innerHTML = empty('No board yet.'); return; }
   const now = Date.now();
   const withV = d.lines.filter(l => !l.start || new Date(l.start) > now - 4 * 3600e3).map(r => ({ r, v: verdictPre(r) }));
-  const armCell = r => r.opp_sp?.name ? `${esc(lastName(r.opp_sp.name))}${r.opp_sp.rating ? ` <span class="rate-${r.opp_sp.rating}">${r.opp_sp.rating}</span>` : ''}` : '—';
-  const penCell = r => r.opp_pen ? `<span class="rate-${r.opp_pen.health}">${cap(r.opp_pen.health)}</span>` : '—';
+  const armCell = r => r.opp_sp?.name ? `${esc(lastName(r.opp_sp.name))}${r.opp_sp.rating ? ` ${rateWord(r.opp_sp.rating)}` : ''}` : '—';
+  const penCell = r => r.opp_pen ? rateWord(r.opp_pen.health, 'pen') : '—';
   const boardCols = [{ label: 'Game', hide: 'hidden md:table-cell' }, { label: 'Form' }, { label: 'Pitcher' }, { label: 'Bullpen', hide: 'hidden lg:table-cell' }];
   const boardCells = r => [`${esc(shortEvent(r.event))} <span class="text-muted-foreground">· ${when(r.start)}</span>`, r.streak >= 3 ? `<span class="text-foreground">${streakText(r)}</span>` : l10Text(r), armCell(r), penCell(r)];
   if (f === 'streak') {
@@ -363,9 +365,9 @@ function renderMove() {
 }
 function armBlock(label, p, pen, team) {
   const rows = [];
-  if (p) { rows.push(['Rating', p.rating ? `<span class="rate-${p.rating}">${cap(p.rating)}</span>${p.ip != null && p.ip < 40 ? ' <span class="m">· few innings this year</span>' : ''}` : '—']); rows.push(['Hits allowed', `${p.h9 ?? '—'} <span class="m">per 9 innings</span>`]); rows.push(['Hitters bat', p.baa ? String(p.baa).replace(/^0/, '') : '—']); }
+  if (p) { rows.push(['Rating', p.rating ? `${rateWord(p.rating)}${p.ip != null && p.ip < 40 ? ' <span class="m">· few innings this year</span>' : ''}` : '—']); rows.push(['Hits allowed', `${p.h9 ?? '—'} <span class="m">per 9 innings</span>`]); rows.push(['Hitters bat', p.baa ? String(p.baa).replace(/^0/, '') : '—']); }
   else rows.push(['Starter', 'Not announced yet']);
-  if (pen) { const dn = pen.top_down || [], ok = pen.top_ok || []; rows.push(['Bullpen', `<span class="rate-${pen.health}">${cap(pen.health)}</span> <span class="m">· ${dn.length ? `${dn.map(lastName).join(', ')} likely out` : ok.length ? `${ok.slice(0, 3).map(lastName).join(', ')} available` : 'best arms available'}</span>`]); }
+  if (pen) { const dn = pen.top_down || [], ok = pen.top_ok || []; rows.push(['Bullpen', `${rateWord(pen.health, 'pen')} <span class="m">· ${dn.length ? `${dn.map(lastName).join(', ')} likely out` : ok.length ? `${ok.slice(0, 3).map(lastName).join(', ')} available` : 'best arms available'}</span>`]); }
   const used = (pen?.arms || []).filter(a => a.yesterday || a.two_days).sort((a, b) => (b.yesterday + b.two_days * .5) - (a.yesterday + a.two_days * .5));
   const l3 = (p?.last3 || []).map(x => { const m = /^(\d+)H\/([\d.]+)IP$/.exec(x); return m ? `${m[1]} hit${m[1] === '1' ? '' : 's'} in ${fmtIP(m[2])}` : x; });
   const details = (p || used.length) ? `<details class="more border-t border-border"><summary>Details</summary><div class="pb-2 text-sm text-muted-foreground leading-relaxed">${p ? `${p.k9 != null ? `${p.k9} strikeouts per 9 · ` : ''}${p.era ? `${p.era} ERA` : ''}${l3.length ? `<br>Last three starts: ${l3.join(', ')}` : ''}` : ''}${used.length ? `<br>Relievers used lately: ${used.map(a => `${lastName(a.name)} (${a.yesterday ? a.yesterday + ' yesterday' : ''}${a.yesterday && a.two_days ? ', ' : ''}${a.two_days ? a.two_days + ' day before' : ''})`).join(', ')}` : ''}</div></details>` : '';
@@ -392,7 +394,7 @@ function renderParlay() {
     return [
       `<span class="text-foreground font-medium">${Math.round(x.m.p * 100)}% to get a hit</span>`,
       `Bats again: ${where}`,
-      `Pitcher: ${arm?.name ? esc(lastName(arm.name)) : '—'}${arm?.rating ? ` (<span class="rate-${arm.rating}">${arm.rating}</span>)` : ''}`,
+      `Pitcher: ${arm?.name ? esc(lastName(arm.name)) : '—'}${arm?.rating ? ` ${rateWord(arm.rating)}` : ''}`,
       `Streak: ${x.r.streak >= 2 ? `${x.r.streak} games` : x.r.streak === 1 ? 'hit yesterday' : 'none'}`,
     ].map(x => `<span class="block sm:inline">${x}</span>`).join('<span class="hidden sm:inline"> · </span>');
   };
@@ -418,10 +420,20 @@ async function refresh() {
     : '<span class="h-1.5 w-1.5 rounded-full bg-risky"></span><span>No data yet</span>';
   renderLive(); renderBoard(); renderMove(); renderPitch(); renderParlay();
 }
-function seg(id, key, fn) { document.querySelectorAll(id + ' button').forEach(b => b.onclick = () => { document.querySelectorAll(id + ' button').forEach(x => x.dataset.state = x === b ? 'active' : 'inactive'); F[key] = b.dataset.f; fn(); }); }
-document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { document.querySelectorAll('#tabs button').forEach(x => x.dataset.state = x === b ? 'active' : 'inactive'); document.querySelectorAll('main section').forEach(s => s.classList.toggle('on', s.id === b.dataset.tab)); });
+/* remember tab + filters across refreshes (per browser) */
+const store = { get() { try { return JSON.parse(localStorage.getItem('ht-view') || '{}'); } catch { return {}; } }, set(v) { try { localStorage.setItem('ht-view', JSON.stringify(v)); } catch {} } };
+function setActive(id, match) { document.querySelectorAll(id + ' button').forEach(x => x.dataset.state = match(x) ? 'active' : 'inactive'); }
+function showTab(tab) { setActive('#tabs', x => x.dataset.tab === tab); document.querySelectorAll('main section').forEach(s => s.classList.toggle('on', s.id === tab)); }
+function seg(id, key, fn) { document.querySelectorAll(id + ' button').forEach(b => b.onclick = () => { setActive(id, x => x === b); F[key] = b.dataset.f; store.set({ ...store.get(), [key]: b.dataset.f }); fn(); }); }
+document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { showTab(b.dataset.tab); store.set({ ...store.get(), tab: b.dataset.tab }); window.scrollTo(0, 0); });
 seg('#live-seg', 'live', renderLive); seg('#board-seg', 'board', renderBoard); seg('#move-seg', 'move', renderMove); seg('#parlay-seg', 'parlay', renderParlay);
 $('#live-q').oninput = renderLive; $('#board-q').oninput = renderBoard; $('#move-q').oninput = renderMove;
+(function restore() {
+  const v = store.get();
+  for (const [key, id] of [['live', '#live-seg'], ['board', '#board-seg'], ['move', '#move-seg'], ['parlay', '#parlay-seg']])
+    if (v[key] && document.querySelector(`${id} button[data-f="${v[key]}"]`)) { F[key] = v[key]; setActive(id, x => x.dataset.f === v[key]); }
+  if (v.tab && document.querySelector(`#tabs button[data-tab="${v.tab}"]`)) showTab(v.tab);
+})();
 refresh(); setInterval(refresh, 60000);
 </script>
 </body>
