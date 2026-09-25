@@ -95,6 +95,7 @@ const KEY = {
     [W('rate-fresh', 'Fresh'), 'Their best relievers are rested. Expect good arms late in the game.'],
     [W('rate-ok', 'Available'), 'Their best relievers can pitch today. Normal.'],
     [W('rate-taxed', 'Taxed'), 'Two or more of their best relievers are worn out from the last two days. Weaker arms pitch late, which helps the hitter.'],
+    ['Likely to pitch late', 'The three best relievers who are rested tonight. His later at bats are priced against them: their hand against his splits, their strikeout and contact rates, and his history against each if there is any.'],
   ]],
   again: ['Bats again', [
     [`<span class="text-take">Yes</span>`, 'His spot in the order is coming up again for sure. Bats again always means after the at bat he is in right now.'],
@@ -372,6 +373,7 @@ function perPA(r, arm, ctx) {
   if (ctx.faced >= 2) { con *= ctx.faced >= 3 ? 1.08 : 1.04; why.push(`${ordinal(ctx.faced + 1)} time facing him`); }
   if (ctx.cold) { con *= .95; why.push('cold night'); }
   if (r.last15_avg != null && r.avg) { const f = Math.max(.95, Math.min(1.05, 1 + 0.15 * (r.last15_avg - r.avg) / r.avg)); con *= f; if (f >= 1.03) why.push('hot last 2 weeks'); else if (f <= .97) why.push('cold last 2 weeks'); }
+  if (ctx.hist && ctx.hist.pa >= 10 && ctx.hist.ab) { const a = ctx.hist.h / ctx.hist.ab; if (a >= .300) { con *= 1.05; why.push(`${ctx.hist.h} for ${ctx.hist.ab} against him`); } else if (a <= .150) { con *= .95; why.push(`${ctx.hist.h} for ${ctx.hist.ab} against him`); } }
   return { p: (1 - bb) * (1 - k) * con, k, bb, con, why, b, pc, pHand, bSide };
 }
 function hitChance(r, meta, live) {
@@ -381,19 +383,23 @@ function hitChance(r, meta, live) {
   const homeAb = meta?.home || abbrOf(teamsOf(r.event).home), park = PARK[homeAb] || 1.0;
   const w = wxOf(r.event) || r.weather;
   const faced = live && r.faced_today && arm.id ? (r.faced_today[String(arm.id)] || 0) : 0;
-  const now = perPA(r, arm, { park, faced, cold: wxCold(w) });
+  const now = perPA(r, arm, { park, faced, cold: wxCold(w), hist: r.bvp });
   // trips left: first ones against this arm, later ones against the bullpen's best available arms
   const left = live ? (tripsFromAgain(r.again) != null ? Math.min(remainingPA(inn, r.pa), tripsFromAgain(r.again) + 0.15) : remainingPA(inn, r.pa)) : PA_PREGAME;
   const starterOut = live ? !!r.sp_out : false;
   const pitches = r.cur_p?.tonight?.pitches || 0;
   const vsArm = live ? (starterOut ? 1 : pitches >= 80 ? 1 : Math.min(left, 2)) : 2.6;
   const vsPen = Math.max(0, left - vsArm);
-  let pPen = now.p;
-  if (vsPen > 0 && r.opp_pen?.late_baa) { const penArm = { hand: null, k_ab: LG.k, ab: 300, con_avg: r.opp_pen.late_baa / (1 - LG.k), bb_pa: LG.bb, splits: null }; pPen = perPA(r, penArm, { park, faced: 0, cold: wxCold(w) }).p; }
+  let pPen = now.p, relievers = [];
+  const likely = (r.opp_pen?.likely || []).filter(a => a && a.id !== arm.id && a.k_ab != null);
+  if (vsPen > 0 && likely.length) {
+    relievers = likely.slice(0, 3).map(a => { const hist = r.bvp_pen?.[String(a.id)]; const m = perPA(r, { ...a, splits: null }, { park, faced: 0, cold: wxCold(w), hist }); return { arm: a, p: m.p, hist, splitAvg: batterRates(r, a.hand).splitAvg }; });
+    pPen = relievers.reduce((s, x) => s + x.p, 0) / relievers.length;
+  } else if (vsPen > 0 && r.opp_pen?.late_baa) { const penArm = { hand: null, k_ab: LG.k, ab: 300, con_avg: r.opp_pen.late_baa / (1 - LG.k), bb_pa: LG.bb, splits: null }; pPen = perPA(r, penArm, { park, faced: 0, cold: wxCold(w) }).p; }
   const P = 1 - Math.pow(1 - now.p, Math.min(left, vsArm)) * Math.pow(1 - pPen, vsPen);
   const bookP = r.odds != null ? implied(r.odds) - VIG : null;
   const Pfair = Math.min(.97, Math.max(.03, P * MODEL_SCALE));           // our chance on the book's scale
-  return { p: P, pFair: Pfair, perPA: now.p, left, inn, why: now.why, edge: bookP != null ? Pfair - bookP : null, fair: (() => { const d = 1 / Pfair; return d >= 2 ? Math.round((d - 1) * 100) : Math.round(-100 / (d - 1)); })(), b: now.b, pc: now.pc, pHand: now.pHand, arm, faced, k: now.k };
+  return { p: P, pFair: Pfair, perPA: now.p, left, inn, why: now.why, relievers, vsPen, pPen, edge: bookP != null ? Pfair - bookP : null, fair: (() => { const d = 1 / Pfair; return d >= 2 ? Math.round((d - 1) * 100) : Math.round(-100 / (d - 1)); })(), b: now.b, pc: now.pc, pHand: now.pHand, arm, faced, k: now.k };
 }
 let MODEL_SCALE = 1;   // median ratio of the book's chance to ours across today's board; our chances are scaled by it so edges are relative to the board
 function calibrate() {
@@ -487,7 +493,9 @@ function tile(r, v, opts = {}) {
     if (mdl && mdl.faced >= 1) notes.push(`${ordinal(mdl.faced + 1)} time facing him today`);
     rows.push([r.sp_out ? 'Facing now' : 'Pitcher', `<span class="whitespace-nowrap">${esc(lastName(arm.name))}${arm.rating ? ` · ${rateWord(arm.rating)}` : ''}</span>${notes.map(n => `<div class="m">${n}</div>`).join('')}`]);
   }
-  if (r.opp_pen) { const p = r.opp_pen, dn = p.top_down || []; rows.push(['Bullpen', `${rateWord(p.health, 'pen')}${dn.length ? `<div class="m">${dn.map(lastName).join(', ')} likely out</div>` : ''}`]); }
+  if (r.opp_pen) { const p = r.opp_pen, dn = p.top_down || [];
+    const arms = (mdl?.relievers || []).map(x => { const facts = []; if (x.splitAvg != null) facts.push(`<span class="whitespace-nowrap"><span class="${x.splitAvg >= HOT_AVG ? 'text-take' : x.splitAvg <= COLD_AVG ? 'text-risky' : ''}">${fmtAvg(x.splitAvg)}</span> vs ${handWord(x.arm.hand)}</span>`); if (x.hist?.ab) facts.push(`<span class="whitespace-nowrap">${x.hist.h} for ${x.hist.ab} against him</span>`); return `<div class="mt-1"><span class="text-foreground">${esc(lastName(x.arm.name))}</span>${x.arm.hand ? ` <span class="m">· throws ${x.arm.hand === 'L' ? 'left' : 'right'}</span>` : ''}</div>${facts.map(f => `<div class="m">${f}</div>`).join('')}`; }).join('');
+    rows.push(['Bullpen', `${rateWord(p.health, 'pen')}${dn.length ? `<div class="m">${dn.map(lastName).join(', ')} likely out</div>` : ''}${arms ? `<div class="m mt-1">Likely to pitch late</div>${arms}` : ''}`]); }
   const w = wxOf(r.event) || r.weather; if (wxText(w)) rows.push(['Weather', wxText(w, true)]);
   return `<div class="card px-5 pt-4 pb-1 ${v === 'dead' ? 'opacity-50' : ''}">
     <div class="flex items-start justify-between gap-4 pb-3"><div class="min-w-0"><div class="mb-0.5">${teamTag(r.team, 18)}</div><div class="truncate text-base font-semibold tracking-tight">${esc(r.player)}</div></div>${price(v, r.odds, live ? pre : (opts.preKey ? pre : null))}</div>
