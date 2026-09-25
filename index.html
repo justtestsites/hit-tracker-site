@@ -113,7 +113,7 @@ const KEY = {
     [`<span class="text-risky">Orange odds</span>`, 'He is Risky: under 58%.'],
   ]],
   hrr: ['Hit, run, or RBI', [
-    [`<span class="text-take">81%</span> · hit, run, or RBI`, 'The DraftKings prop: 1 or more hits + runs + RBIs. A hit counts, and so does scoring a run or driving one in without a hit. Our chance is the hit chance plus his own season rate of runs scored after walks and RBIs on outs and walks. Green = 78% or better. Orange = under 65%. An average regular is about 72% pregame.'],
+    [`<span class="text-take">81%</span> · hit, run, or RBI`, 'The DraftKings prop: 1 or more hits + runs + RBIs. A hit counts, and so does scoring a run or driving one in without a hit. Our chance is the hit chance plus his own season rate of runs scored after walks and RBIs on outs and walks. Green = 75% or better. Orange = under 62%.'],
     ['0 hits · 0 runs · 0 RBI', 'Where he stands today. Once any of the three is 1 or more the prop is done and the card is dimmed.'],
     ['-372 · DraftKings says 77%', 'The DraftKings price for 1+ hits + runs + RBIs, pulled every few minutes, and the chance it implies with their cut taken out. FanDuel does not offer this prop. "No line pulled" means DraftKings had no line for him or the pull failed.'],
     ['This season · had one in 118 of 140 games', 'How often he has had at least one hit, run, or RBI in a game this season.'],
@@ -154,7 +154,7 @@ const KEY = {
   ]],
   board: ['Filters', [
     ['Take', 'Only the hitters marked Take: a 70% or better chance of a hit.'],
-    ['Hit, run, or RBI', 'The whole board judged on the DraftKings 1+ hits + runs + RBIs prop. Take there means 78% or better.'],
+    ['Hit, run, or RBI', 'The whole board judged on the DraftKings 1+ hits + runs + RBIs prop. Take there means 75% or better.'],
     ['Streaks', 'Hitters with a hit in 3 or more games in a row.'],
   ]],
   move: ['Line movement', [
@@ -419,7 +419,7 @@ function calibrate() {
 }
 const rankOf = (r, meta, live) => { const m = hitChance(r, meta, live); if (m && m.pFair != null) return m.pFair * 100; return r.pre != null ? diffOdds(r.odds, r.pre) / 10 : -1e9; };   // bigger = better pick: the chance of a hit, nothing else
 /* ===== hit + run + RBI (1+): a hit counts, and so does scoring a run or driving one in without a hit ===== */
-const HRR_TAKE = .78, HRR_RISKY = .65;                 // scaled to the prop: an average regular is ~72% pregame, versus ~63% for a hit
+const HRR_TAKE = .75, HRR_RISKY = .62;                 // scaled to the prop: an average regular is ~72% pregame, versus ~63% for a hit
 const hrrTier = P => P == null ? null : P >= HRR_TAKE ? 'take' : P < HRR_RISKY ? 'risky' : 'neutral';
 const hrrCls = P => P == null ? '' : P >= HRR_TAKE ? 'text-take' : P < HRR_RISKY ? 'text-risky' : 'text-foreground';
 const hrrToday = r => (r.hits ?? 0) + (r.runs ?? 0) + (r.rbi ?? 0);
@@ -512,7 +512,8 @@ function tile(r, v, opts = {}) {
   if (live && hrr) rows.push(['Today', `<span class="whitespace-nowrap">${r.hits ?? 0} hit${r.hits === 1 ? '' : 's'}</span> · <span class="whitespace-nowrap">${r.runs ?? 0} run${r.runs === 1 ? '' : 's'}</span> · <span class="whitespace-nowrap">${r.rbi ?? 0} RBI</span>${paWords(r) ? `<div class="m">${paWords(r)}</div>` : ''}`]);
   else if (live) rows.push(['Today', `${r.hits} for ${r.ab}${paWords(r) ? `<div class="m">${paWords(r)}</div>` : (r.pa && r.pa > r.ab ? ` <span class="m">· ${r.pa - r.ab} walk${r.pa - r.ab === 1 ? '' : 's'}</span>` : '')}`]);
   const l = l10n(r);
-  if (!live) rows.push(['Last 10', l ? `Hit in ${l[0]} of ${l[1]}${dots(r)}` : '—']);
+  if (!live && hrr) rows.push(['Last 10', r.hrr_last10 != null ? `Had one in ${r.hrr_last10} of 10 <span class="m">· hit, run, or RBI</span>` : '—']);
+  else if (!live) rows.push(['Last 10', l ? `Hit in ${l[0]} of ${l[1]}${dots(r)}` : '—']);
   const lastH = r.last10_hits?.length ? r.last10_hits[r.last10_hits.length - 1] : null;
   const mdl = hitChance(r, opts.meta || null, live);
   if (hrr) { const hm = hrrChance(r, opts.meta || null, live); if (hm) rows.push(['Chance', `<span class="${hrrCls(hm.pFair)}">${Math.round(hm.pFair * 100)}%</span> <span class="m">· hit, run, or RBI</span>${r.hrr_odds != null ? `<div class="m">DraftKings says ${Math.round((implied(r.hrr_odds) - VIG) * 100)}%</div>` : ''}<div class="m">${Math.round(hm.pHit * 100)}% for a hit alone</div>`]); }
