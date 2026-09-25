@@ -145,7 +145,7 @@ const KEY = {
     ['Hit in 7 of last 10', 'How many of his last 10 games included a hit.'],
   ]],
   board: ['Filters', [
-    ['Take', 'Only the hitters marked Take: strongly favored, not cold, and not facing a tough pitcher.'],
+    ['Take', 'Only the hitters marked Take: our hit chance beats the price by 4 points or more.'],
     ['Streaks', 'Hitters with a hit in 3 or more games in a row.'],
   ]],
   move: ['Line movement', [
@@ -399,6 +399,7 @@ function calibrate() {
   const ratios = (DATA.board?.lines || []).map(r => { const m = hitChance(r, null, false); return m && r.odds != null ? (implied(r.odds) - VIG) / m.p : null; }).filter(x => x != null && isFinite(x)).sort((a, b) => a - b);
   if (ratios.length >= 15) MODEL_SCALE = Math.min(1.25, Math.max(0.75, ratios[Math.floor(ratios.length / 2)]));
 }
+const rankOf = (r, meta, live) => { const m = hitChance(r, meta, live); if (m && m.edge != null) return m.edge * 100; return r.pre != null ? diffOdds(r.odds, r.pre) / 10 : -1e9; };   // bigger = better pick
 const edgeCls = e => e == null ? '' : e >= .04 ? 'text-take' : e <= -.04 ? 'text-risky' : 'text-foreground';
 function legModel(r, meta) {
   const m = hitChance(r, meta, true);
@@ -549,17 +550,17 @@ function renderLive() {
     const hot = withV.filter(x => x.r.streak >= 3 && x.r.hits === 0 && x.v !== 'dead').sort((a, b) => b.r.streak - a.r.streak || a.r.odds - b.r.odds).slice(0, 12);
     $('#live-picks').innerHTML = picksBox(hot, 'Streaks on the line', 'Hitters on a streak of three or more with no hit yet today, longest first.', liveCells, liveCols, r => d.games?.[r.event]);
   } else if (f === 'hot') {
-    const hb = withV.filter(x => isHotSpot(x.r, d.games?.[x.r.event]) && x.v !== 'dead').sort((a, b) => avgOf(b.r) - avgOf(a.r) || a.r.odds - b.r.odds).slice(0, 12);
+    const hb = withV.filter(x => isHotSpot(x.r, d.games?.[x.r.event]) && x.v !== 'dead').sort((a, b) => rankOf(b.r, d.games?.[b.r.event], true) - rankOf(a.r, d.games?.[a.r.event], true) || avgOf(b.r) - avgOf(a.r)).slice(0, 12);
     $('#live-picks').innerHTML = picksBox(hb, 'Hot bats still hitless', `Hitting ${fmtAvg(HOT_AVG)} or better this season, no hit yet, 4th inning or later, and due to bat again. Highest average first.`, liveCells, liveCols, r => d.games?.[r.event]);
   } else {
-    const takes = withV.filter(x => x.v === 'take' && isTarget(x.r)).sort((a, b) => diffOdds(b.r.odds, b.r.pre) - diffOdds(a.r.odds, a.r.pre));
+    const takes = withV.filter(x => x.v === 'take' && isTarget(x.r)).sort((a, b) => rankOf(b.r, d.games?.[b.r.event], true) - rankOf(a.r, d.games?.[a.r.event], true));
     $('#live-picks').innerHTML = picksBox(takes, 'Best spots right now', 'Favored before the game, no hit yet, more at bats coming, and a better price than pregame.', liveCells, liveCols, r => d.games?.[r.event]);
   }
   const keep = withV.filter(({ r, v }) => matchQ(r, q) && (f === 'all' || (f === 'targets' && isTarget(r)) || (f === 'streak' && r.streak >= 3 && r.hits === 0) || (f === 'hot' && isHotSpot(r, d.games?.[r.event]))));
   const order = { take: 0, neutral: 1, risky: 2, dead: 3 }, innOf = ev => inningNum(d.games?.[ev]?.inning) ?? 99;
   const out = [];
   for (const [ev, xs] of [...groupBy(keep, x => x.r.event)].sort((a, b) => innOf(a[0]) - innOf(b[0]))) {
-    xs.sort((a, b) => order[a.v] - order[b.v] || ((b.r.pre != null ? diffOdds(b.r.odds, b.r.pre) : -1e9) - (a.r.pre != null ? diffOdds(a.r.odds, a.r.pre) : -1e9)));
+    xs.sort((a, b) => order[a.v] - order[b.v] || rankOf(b.r, d.games?.[ev], true) - rankOf(a.r, d.games?.[ev], true));
     out.push(gameSection(ev, xs.map(({ r, v }) => tile(r, v, { meta: d.games?.[ev] })).join(''), d.games?.[ev], xs[0].r.start));
   }
   $('#live-note').textContent = (f === 'targets' && d.rows.some(r => r.pre == null && r.hits === 0)) ? 'A few hitless players are hidden because we never captured a pregame price for them. They show under Everyone.' : '';
@@ -581,12 +582,13 @@ function renderBoard() {
     const hot = withV.filter(x => x.r.streak >= 3).sort((a, b) => b.r.streak - a.r.streak || a.r.odds - b.r.odds).slice(0, 12);
     $('#board-picks').innerHTML = picksBox(hot, 'Longest active hit streaks', 'Consecutive games with at least one hit, longest first.', boardCells, boardCols) || empty('Nobody on the board has a hit streak of three or more.');
   } else {
-    const takes = withV.filter(x => x.v === 'take').sort((a, b) => a.r.odds - b.r.odds).slice(0, 12);
-    $('#board-picks').innerHTML = picksBox(takes, 'Strongest pregame spots', 'Priced -250 or better, or on a hit streak of five or more. These are the names to watch once the games start.', boardCells, boardCols);
+    const takes = withV.filter(x => x.v === 'take').sort((a, b) => rankOf(b.r, null, false) - rankOf(a.r, null, false) || a.r.odds - b.r.odds).slice(0, 12);
+    $('#board-picks').innerHTML = picksBox(takes, 'Strongest pregame spots', 'Where our hit chance beats the price by the most, best first. These are the names to watch once the games start.', boardCells, boardCols);
   }
   const keep = withV.filter(({ r, v }) => matchQ(r, q) && (f === 'all' || (f === 'take' && v === 'take') || (f === 'streak' && r.streak >= 3)));
   const games = [...groupBy(keep, x => x.r.event)].sort((a, b) => (a[1][0].r.start || '').localeCompare(b[1][0].r.start || ''));
-  $('#board-games').innerHTML = games.map(([ev, xs]) => { xs.sort((a, b) => a.r.odds - b.r.odds); return gameSection(ev, xs.map(({ r, v }) => tile(r, v, { preLabel: 'Line' })).join(''), null, xs[0].r.start); }).join('') || empty('Nothing matches.');
+  const orderB = { take: 0, neutral: 1, risky: 2 };
+  $('#board-games').innerHTML = games.map(([ev, xs]) => { xs.sort((a, b) => orderB[a.v] - orderB[b.v] || rankOf(b.r, null, false) - rankOf(a.r, null, false) || a.r.odds - b.r.odds); return gameSection(ev, xs.map(({ r, v }) => tile(r, v, { preLabel: 'Line' })).join(''), null, xs[0].r.start); }).join('') || empty('Nothing matches.');
 }
 const tdc = 'px-4 py-2.5 align-middle';
 function moveRow(m) {
