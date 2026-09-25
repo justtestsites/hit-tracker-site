@@ -81,9 +81,9 @@
 const W = (cls, t) => `<span class="${cls} text-[11px] font-semibold uppercase tracking-wider">${t}</span>`;
 const KEY = {
   pick: ['Is it a good pick', [
-    [W('text-take', 'Take'), 'Our hit chance beats the book\'s price by 4 points or more, he has more at bats coming, and nothing (rain, last at bat) rules him out. Worth a look at this price.'],
-    [W('text-muted-foreground', 'Neutral'), 'Our chance and the book\'s price are within 4 points of each other. Fairly priced. Your call.'],
-    [W('text-risky', 'Risky'), 'The book is charging more than his chance is worth, or something rules him out: late in the game with no at bat coming, rain, or his last at bat is already here.'],
+    [W('text-take', 'Take'), 'We give him a 70% or better chance of getting a hit (from this point on, in a live game), and nothing rules him out: rain, last at bat, or late in the game with no at bat coming.'],
+    [W('text-muted-foreground', 'Neutral'), 'A 58% to 69% chance. Better than a coin flip, not a lock. Your call.'],
+    [W('text-risky', 'Risky'), 'Under a 58% chance, or something rules him out: late in the game with no at bat coming, rain, or his last at bat is already here. Late in a game most hitless hitters land here, because there are few at bats left.'],
     [W('text-muted-foreground', 'Hit ✓'), 'He already got his hit today. Nothing left to play.'],
   ]],
   pitcher: ['The pitcher he is facing', [
@@ -108,8 +108,8 @@ const KEY = {
     ['-200', 'Favored. The book thinks he will get a hit. You risk $200 to win $100.'],
     ['+120', 'Not favored. Better payout. You risk $100 to win $120.'],
     ['was -165', 'What the price was before the game started.'],
-    [`<span class="text-take">Green odds</span>`, 'Worth a look at this price.'],
-    [`<span class="text-risky">Orange odds</span>`, 'Something is working against him.'],
+    [`<span class="text-take">Green odds</span>`, 'He is a Take: 70% or better to get a hit.'],
+    [`<span class="text-risky">Orange odds</span>`, 'He is Risky: under 58%.'],
   ]],
   targets: ['Filters', [
     ['Targets', 'Hitters who were favored before the game (-150 or better), still have no hit, and can be bought at a better price now than pregame.'],
@@ -119,8 +119,7 @@ const KEY = {
     ['.150 vs Skenes · 3 for 20', 'His career average against the pitcher on the mound right now, and the count behind it. It switches to the reliever when one comes in. Colored only once there are 10 or more plate appearances; small counts are mostly luck.'],
   ]],
   model: ['Hit chance', [
-    [`<span class="text-take">62%</span> · fair price -165`, 'Our estimate of his chance to get a hit from this point on, and the price that chance is worth. Built from his strikeout and walk rates against this pitcher\'s hand, the pitcher\'s rates against his side, the park, how many times he has faced this pitcher today, the weather, and who pitches late.'],
-    ['Book price says 49%', 'What FanDuel\'s price implies, with their cut taken out. Green chance = we think he is at least 4 points more likely than the book does. Orange = at least 4 points less.'],
+    [`<span class="text-take">72%</span> · FanDuel says 60%`, 'Our estimate of his chance to get a hit from this point on. Built from his strikeout and walk rates against this pitcher\'s hand, the pitcher\'s rates against his side, the park, how many times he has faced this pitcher today, the weather, and who pitches late. Green = 70% or better. Orange = under 58%. The FanDuel number is what their price implies, shown for comparison only: on pick\'em apps the payout is the same, so only the chance matters.'],
     ['.312 vs righties', 'His average against pitchers who throw with the hand that is on the mound right now. Hundreds of at bats, so it means more than history against one pitcher.'],
     ['Strikes out 15% · Skenes 31%', 'How often he strikes out, and how often this pitcher strikes hitters out. A hit needs a ball in play, and strikeout rate is the most reliable number in baseball.'],
     ['3rd time facing him today', 'Hitters do markedly better the third time they see the same starter in a game.'],
@@ -145,7 +144,7 @@ const KEY = {
     ['Hit in 7 of last 10', 'How many of his last 10 games included a hit.'],
   ]],
   board: ['Filters', [
-    ['Take', 'Only the hitters marked Take: our hit chance beats the price by 4 points or more.'],
+    ['Take', 'Only the hitters marked Take: a 70% or better chance of a hit.'],
     ['Streaks', 'Hitters with a hit in 3 or more games in a row.'],
   ]],
   move: ['Line movement', [
@@ -167,7 +166,7 @@ const KEY = {
   parlay: ['Live parlays', [
     ['Who qualifies', 'Favored before the game (-150 or better), no hit yet, game in the 3rd through 6th inning, and his spot in the order is coming up again.'],
     ['One per team', 'The ticket takes the best hitter from each team. Two hitters from the same game is fine if they are on opposite sides. A second hitter from one team is used only on 5 and 6 player tickets when there are not enough teams, only if he is the next best overall, and only one team per game can double up: never two and two from one game.'],
-    ['% to get a hit', 'Our estimate of his chance to get a hit before the game ends.'],
+    ['% to get a hit', 'Our estimate of his chance to get a hit before the game ends. Legs are ranked by this and nothing else.'],
     ['Odds', 'FanDuel’s current price for each player. Build the ticket on FanDuel to see the payout.'],
   ]],
 };
@@ -283,9 +282,9 @@ function verdictLive(r, meta) {
   if (ag === 'unlikely' || ag === 'last') return 'risky';                                       // his spot probably doesn't come up again
   if (wxRain(w)) return 'risky';                                               // rain: delay, shortened game, or a voided bet
   const m = hitChance(r, meta, true);
-  if (m && m.edge != null) {                                                   // the matchup model decides when we have the data
+  if (m && m.pFair != null) {                                                  // the matchup model decides when we have the data
     if (inn >= 8 && ag !== 'yes' && ag !== 'likely') return 'risky';
-    return m.edge >= .04 ? 'take' : m.edge <= -.04 ? 'risky' : 'neutral';
+    return tierOf(m.pFair);
   }
   if (isHotSpot(r, meta) && now >= -140 && !tough && !wxCold(w)) return 'take';   // high average, hitless, 4th inning or later
   if (inn >= 8 && ag !== 'yes' && ag !== 'likely' && !(penTaxed && r.hits === 0 && strongPre)) return 'risky';
@@ -305,7 +304,7 @@ function verdictPre(r) {
   const sp = r.opp_sp?.rating, w = wxOf(r.event) || r.weather, hotAvg = hotBat(r), coldAvg = coldBat(r);
   if (wxRain(w)) return 'risky';
   const m = hitChance(r, null, false);
-  if (m && m.edge != null) return m.edge >= .04 ? 'take' : m.edge <= -.04 ? 'risky' : 'neutral';
+  if (m && m.pFair != null) return tierOf(m.pFair);
   if (wxCold(w)) return o > -200 ? 'risky' : 'neutral';
   if (o <= -250 && !cold && !coldAvg && sp !== 'tough') return 'take';
   if (hot && o <= -170 && sp !== 'tough') return 'take';
@@ -340,6 +339,9 @@ function remainingPA(inn, pa) {
 /* ===== matchup model: per-at-bat hit chance from who he is, who he is facing, where, and when ===== */
 const LG = { con: .327, k: .250, bb: .085 };          // league: contact average (hits per non-strikeout at bat), strikeouts per at bat, walks+HBP per PA
 const VIG = .022;                                     // roughly what FanDuel bakes into one side of a hit line
+const TAKE_P = .70, RISKY_P = .58;                    // verdicts are about the chance of a hit, not the price: pick'em apps pay the same either way
+const tierOf = P => P == null ? null : P >= TAKE_P ? 'take' : P < RISKY_P ? 'risky' : 'neutral';
+const chanceCls = P => P == null ? '' : P >= TAKE_P ? 'text-take' : P < RISKY_P ? 'text-risky' : 'text-foreground';
 const PARK = { COL: 1.16, BOS: 1.07, KC: 1.05, CIN: 1.04, ARI: 1.03, TEX: 1.02, BAL: 1.02, PHI: 1.01, MIN: 1.01, CHC: 1.01, WSH: 1.01, HOU: 1.0, TOR: 1.0, ATL: 1.0, LAA: 1.0, CWS: 1.0, MIL: 1.0, STL: .99, PIT: .99, NYY: .99, CLE: .98, DET: .98, LAD: .98, TB: .97, MIA: .97, SD: .96, NYM: .96, SF: .95, ATH: .94, OAK: .94, SEA: .93 };
 const log5 = (b, pch, lg) => { const n = b * pch / lg, d = (1 - b) * (1 - pch) / (1 - lg); return n / (n + d); };
 const shrink = (x, n, prior, k) => x == null || !n ? prior : (x * n + prior * k) / (n + k);
@@ -399,7 +401,7 @@ function calibrate() {
   const ratios = (DATA.board?.lines || []).map(r => { const m = hitChance(r, null, false); return m && r.odds != null ? (implied(r.odds) - VIG) / m.p : null; }).filter(x => x != null && isFinite(x)).sort((a, b) => a - b);
   if (ratios.length >= 15) MODEL_SCALE = Math.min(1.25, Math.max(0.75, ratios[Math.floor(ratios.length / 2)]));
 }
-const rankOf = (r, meta, live) => { const m = hitChance(r, meta, live); if (m && m.pFair != null) return m.pFair * 100 + (m.edge || 0); return r.pre != null ? diffOdds(r.odds, r.pre) / 10 : -1e9; };   // bigger = better pick: chance first, edge breaks ties
+const rankOf = (r, meta, live) => { const m = hitChance(r, meta, live); if (m && m.pFair != null) return m.pFair * 100; return r.pre != null ? diffOdds(r.odds, r.pre) / 10 : -1e9; };   // bigger = better pick: the chance of a hit, nothing else
 const edgeCls = e => e == null ? '' : e >= .04 ? 'text-take' : e <= -.04 ? 'text-risky' : 'text-foreground';
 function legModel(r, meta) {
   const m = hitChance(r, meta, true);
@@ -421,7 +423,7 @@ function parlayLegs() {
     if (r.pre == null || r.pre > -150 || r.hits !== 0 || inn == null || inn < 3 || inn > 6) continue;
     if (r.again?.verdict === 'unlikely' || r.again?.verdict === 'maybe' || r.again?.verdict === 'last') continue;
     if (wxRain(wxOf(r.event) || r.weather)) continue;                                   // never build a ticket through a rain game
-    const v = verdictLive(r, meta); if (v === 'risky' || v === 'dead') continue;
+    const v = verdictLive(r, meta); if (v === 'dead') continue;                          // ranked purely by chance of a hit from here
     legs.push({ r, meta, v, m: legModel(r, meta) });
   }
   legs.sort((a, b) => b.m.p - a.m.p);
@@ -464,7 +466,7 @@ function tile(r, v, opts = {}) {
   if (!live) rows.push(['Last 10', l ? `Hit in ${l[0]} of ${l[1]}${dots(r)}` : '—']);
   const lastH = r.last10_hits?.length ? r.last10_hits[r.last10_hits.length - 1] : null;
   const mdl = hitChance(r, opts.meta || null, live);
-  if (mdl) rows.push(['Hit chance', `<span class="${edgeCls(mdl.edge)}">${Math.round(mdl.pFair * 100)}%</span> <span class="m">· fair price ${odds(mdl.fair)}</span>${r.odds != null ? `<div class="m">Book price says ${Math.round((implied(r.odds) - VIG) * 100)}%</div>` : ''}`]);
+  if (mdl) rows.push(['Hit chance', `<span class="${chanceCls(mdl.pFair)}">${Math.round(mdl.pFair * 100)}%</span>${r.odds != null ? ` <span class="m">· FanDuel says ${Math.round((implied(r.odds) - VIG) * 100)}%</span>` : ''}`]);
   { const a = avgOf(r); const main = r.avg == null ? '' : a == null ? `${fmtAvg(r.avg)} <span class="m">· only ${r.ab_season} at bats</span>` : `<span class="${hotBat(r) ? 'text-take' : coldBat(r) ? 'text-risky' : ''}">${fmtAvg(a)}</span>${hotBat(r) ? ' <span class="m">· hot bat</span>' : ''}`; if (main) rows.push(['Average', main]); const vr = vsArmRow(r); if (vr) rows.push(vr); }
   if (mdl) {
     const bits = [];
@@ -514,10 +516,10 @@ function picksBox(list, title, sub, cellsOf, cols, liveMeta = null) {
     const cells = cellsOf(r);
     return `<tr class="border-b border-border last:border-0 align-top">
       <td class="px-4 py-3 w-full max-w-0 sm:w-auto sm:max-w-none">
-        <div class="hidden sm:flex items-center gap-2 font-semibold"><span class="shrink-0">${logo(r.team, 18)}</span><span class="whitespace-nowrap">${esc(r.player)}</span></div>${(() => { const m = hitChance(r, liveMeta ? liveMeta(r) : null, !!liveMeta); return m ? `<div class="hidden sm:block text-xs whitespace-nowrap"><span class="${edgeCls(m.edge)}">${Math.round(m.pFair * 100)}%</span> <span class="text-muted-foreground">· fair ${odds(m.fair)}</span></div>` : ''; })()}
+        <div class="hidden sm:flex items-center gap-2 font-semibold"><span class="shrink-0">${logo(r.team, 18)}</span><span class="whitespace-nowrap">${esc(r.player)}</span></div>${(() => { const m = hitChance(r, liveMeta ? liveMeta(r) : null, !!liveMeta); return m ? `<div class="hidden sm:block text-xs whitespace-nowrap"><span class="${chanceCls(m.pFair)}">${Math.round(m.pFair * 100)}%</span> <span class="text-muted-foreground">to get a hit</span></div>` : ''; })()}
         <div class="sm:hidden px-1 pt-1">
           <div class="flex items-start justify-between gap-4 pb-3"><div class="min-w-0"><div class="mb-0.5">${teamTag(r.team, 18)}</div><div class="truncate text-base font-semibold tracking-tight">${esc(r.player)}</div></div>${price(v, r.odds, r.pre)}</div>
-          ${kv([...(() => { const m = hitChance(r, liveMeta ? liveMeta(r) : null, !!liveMeta); return m ? [['Hit chance', `<span class="${edgeCls(m.edge)}">${Math.round(m.pFair * 100)}%</span> <span class="m">· fair ${odds(m.fair)}</span>`]] : []; })(), ...cells.map((c, i) => [cols[i].label, c]).filter(([, c]) => c && c !== '—')])}
+          ${kv([...(() => { const m = hitChance(r, liveMeta ? liveMeta(r) : null, !!liveMeta); return m ? [['Hit chance', `<span class="${chanceCls(m.pFair)}">${Math.round(m.pFair * 100)}%</span>`]] : []; })(), ...cells.map((c, i) => [cols[i].label, c]).filter(([, c]) => c && c !== '—')])}
         </div>
       </td>
       ${cells.map((c, i) => `<td class="px-4 py-3 text-[13px] text-muted-foreground ${cols[i].wrap ? 'min-w-[120px]' : 'whitespace-nowrap'} ${cols[i].hide || 'hidden sm:table-cell'}">${c}</td>`).join('')}
@@ -554,7 +556,7 @@ function renderLive() {
     $('#live-picks').innerHTML = picksBox(hb, 'Hot bats still hitless', `Hitting ${fmtAvg(HOT_AVG)} or better this season, no hit yet, 4th inning or later, and due to bat again. Highest average first.`, liveCells, liveCols, r => d.games?.[r.event]);
   } else {
     const takes = withV.filter(x => x.v === 'take' && isTarget(x.r)).sort((a, b) => rankOf(b.r, d.games?.[b.r.event], true) - rankOf(a.r, d.games?.[a.r.event], true));
-    $('#live-picks').innerHTML = picksBox(takes, 'Best spots right now', 'Favored before the game, no hit yet, more at bats coming, a better price than pregame, and our chance beats that price. Most likely to get a hit first.', liveCells, liveCols, r => d.games?.[r.event]);
+    $('#live-picks').innerHTML = picksBox(takes, 'Best spots right now', 'Still hitless with at bats coming, and a 70% or better chance of a hit from here. Most likely first.', liveCells, liveCols, r => d.games?.[r.event]);
   }
   const keep = withV.filter(({ r, v }) => matchQ(r, q) && (f === 'all' || (f === 'targets' && isTarget(r)) || (f === 'streak' && r.streak >= 3 && r.hits === 0) || (f === 'hot' && isHotSpot(r, d.games?.[r.event]))));
   const order = { take: 0, neutral: 1, risky: 2, dead: 3 }, innOf = ev => inningNum(d.games?.[ev]?.inning) ?? 99;
@@ -584,7 +586,7 @@ function renderBoard() {
     $('#board-picks').innerHTML = picksBox(hot, 'Longest active hit streaks', 'Consecutive games with at least one hit, longest first.', boardCells, boardCols) || empty('Nobody on the board has a hit streak of three or more.');
   } else {
     const takes = withV.filter(x => x.v === 'take').sort((a, b) => rankOf(b.r, null, false) - rankOf(a.r, null, false) || a.r.odds - b.r.odds).slice(0, 12);
-    $('#board-picks').innerHTML = picksBox(takes, 'Strongest pregame spots', 'Every hitter whose chance beats his price by 4 points or more, most likely to get a hit first. These are the names to watch once the games start.', boardCells, boardCols);
+    $('#board-picks').innerHTML = picksBox(takes, 'Strongest pregame spots', 'Every hitter we give a 70% or better chance of a hit, most likely first. These are the names to watch once the games start.', boardCells, boardCols);
   }
   const keep = withV.filter(({ r, v }) => matchQ(r, q) && (f === 'all' || (f === 'take' && v === 'take') || (f === 'streak' && r.streak >= 3)));
   const games = [...groupBy(keep, x => x.r.event)].sort((a, b) => (a[1][0].r.start || '').localeCompare(b[1][0].r.start || ''));
