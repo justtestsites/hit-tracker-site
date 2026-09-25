@@ -44,6 +44,7 @@
       <input id="board-q" type="search" class="input max-w-xs" placeholder="Player or team">
       <div class="tabs-list w-full sm:w-auto grid grid-cols-3 sm:inline-flex" id="board-seg"><button class="tabs-trigger" data-f="all" data-state="active">All</button><button class="tabs-trigger" data-f="take" data-state="inactive">Take</button><button class="tabs-trigger" data-f="streak" data-state="inactive">Streaks</button></div>
     </div>
+    <div id="board-note"></div>
     <div id="board-picks"></div>
     <div id="board-games" class="space-y-8"></div>
     <div id="key-board"></div>
@@ -54,6 +55,7 @@
       <input id="move-q" type="search" class="input max-w-xs" placeholder="Player or team">
       <div class="tabs-list w-full sm:w-auto grid grid-cols-3 sm:inline-flex" id="move-seg"><button class="tabs-trigger" data-f="all" data-state="active">All games</button><button class="tabs-trigger" data-f="live" data-state="inactive">Live now</button><button class="tabs-trigger px-1 sm:px-3" data-f="movers" data-state="inactive"><span class="sm:hidden">Favored</span><span class="hidden sm:inline">More favored only</span></button></div>
     </div>
+    <div id="move-note"></div>
     <div id="move-top"></div>
     <div id="move-games" class="space-y-8"></div>
     <div id="rep-block"></div>
@@ -186,7 +188,7 @@ const ordinal = n => n + (n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th
 const l10Text = r => { const l = l10n(r); return l ? `Hit in ${l[0]} of last ${l[1]}` : ''; };
 const streakText = r => { const lastH = r.last10_hits?.length ? r.last10_hits[r.last10_hits.length - 1] : null; return r.streak == null ? '' : r.streak >= 2 ? `${r.streak}-game hit streak${r.streak_hits ? ` (${r.streak_hits} hits)` : ''}` : r.streak === 1 ? `${lastH ? `${lastH} hit${lastH === 1 ? '' : 's'}` : 'Hit'} yesterday` : 'No hit streak'; };
 const shortEvent = ev => { const t = teamsOf(ev); return `${nick(t.away)} @ ${nick(t.home)}`; };
-const when = iso => iso ? new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+const when = iso => { if (!iso) return ''; const t = new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); const dk = dayKey(iso), today = dayKey(Date.now()); if (dk === today) return t; const tom = dayKey(Date.now() + 86400e3); return `${dk === tom ? 'Tomorrow' : new Date(iso).toLocaleDateString([], { weekday: 'short' })} ${t}`; };
 const inningWords = t => { if (!t) return ''; return t.replace(/^(Top|Bottom|Middle|End)\s+(\d+\w\w)$/, (m, a, b) => ({ Top: 'Top of the', Bottom: 'Bottom of the', Middle: 'Middle of the', End: 'End of the' })[a] + ' ' + b); };
 const inningNum = t => { const m = /(\d+)/.exec(t || ''); return m ? +m[1] : null; };
 const l10n = r => { const m = /^(\d+)\/(\d+)/.exec(r.last10 || ''); return m ? [+m[1], +m[2]] : null; };
@@ -211,6 +213,19 @@ const toDec = a => a > 0 ? 1 + a / 100 : 1 + 100 / Math.abs(a);
 const toAmer = d => d >= 2 ? '+' + Math.round((d - 1) * 100) : String(Math.round(-100 / (d - 1)));
 const implied = a => a > 0 ? 100 / (a + 100) : Math.abs(a) / (Math.abs(a) + 100);
 const PA_PREGAME = 4.2;   // typical plate appearances for a starter
+// Which day's games to show: today's, until every game today is over (or there are none); then the next day's.
+const dayKey = iso => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const GAME_OVER_AFTER = 4 * 3600e3;       // a game is treated as over 4 hours after first pitch unless the live feed says it is still going
+function pickDay(items, liveEvents) {
+  const now = Date.now(), today = dayKey(now);
+  const days = [...new Set(items.filter(x => x.start).map(x => dayKey(x.start)))].sort();
+  const stillOn = x => new Date(x.start) > now - GAME_OVER_AFTER || (liveEvents && liveEvents.has(x.event));
+  if (items.some(x => x.start && dayKey(x.start) === today && stillOn(x))) return { day: today, tomorrow: false };
+  const next = days.find(dk => dk > today);
+  return next ? { day: next, tomorrow: true } : { day: today, tomorrow: false };
+}
+const dayNote = (pick, what) => pick.tomorrow ? `<div class="mb-4 text-sm text-muted-foreground">Today's games are finished. Showing tomorrow's ${what}.</div>` : '';
+const onDay = (items, pick) => items.filter(x => !x.start || dayKey(x.start) === pick.day);
 const LEAGUE_AVG = .245, AVG_SHRINK = 300;    // season average regressed toward league (AVG only settles after ~900 AB)
 const HOT_AVG = .270, COLD_AVG = .225, MIN_AB = 100;
 const avgOf = r => r.avg != null && r.ab_season >= MIN_AB ? r.avg : null;                      // shown only once it means something
@@ -476,8 +491,9 @@ function renderBoard() {
   const d = DATA.board, q = ($('#board-q').value || '').toLowerCase(), f = F.board;
   $('#n-board').textContent = d?.lines?.length ?? 0;
   if (!d?.lines) { $('#board-games').innerHTML = empty('No board yet.'); return; }
-  const now = Date.now();
-  const withV = d.lines.filter(l => !l.start || new Date(l.start) > now - 4 * 3600e3).map(r => ({ r, v: verdictPre(r) }));
+  const liveEv0 = new Set(Object.keys(DATA.live?.games || {})), pick = pickDay(d.lines, liveEv0);
+  const withV = onDay(d.lines, pick).map(r => ({ r, v: verdictPre(r) }));
+  $('#board-note').innerHTML = dayNote(pick, 'board');
   const armCell = r => r.opp_sp?.name ? `<span class="whitespace-nowrap">${esc(lastName(r.opp_sp.name))}${r.opp_sp.rating ? ` ${rateWord(r.opp_sp.rating)}` : ''}</span>` : '—';
   const penCell = r => r.opp_pen ? rateWord(r.opp_pen.health, 'pen') : '—';
   const avgCell = r => { const a = avgOf(r), vs = vsArmText(r); if (a == null && !vs) return '—'; return `${a == null ? '' : `<span class="${hotBat(r) ? 'text-take' : coldBat(r) ? 'text-risky' : 'text-foreground'}">${fmtAvg(a)}</span>`}${vs ? `<div>${vs}</div>` : ''}`; };
@@ -523,7 +539,9 @@ function pregameRows(rows) {
   });
 }
 function renderMove() {
-  const d = DATA.move, q = ($('#move-q').value || '').toLowerCase(), f = F.move, rows = pregameRows(d?.rows || []);
+  const d = DATA.move, q = ($('#move-q').value || '').toLowerCase(), f = F.move, rowsAll = pregameRows(d?.rows || []);
+  const pickM = pickDay(rowsAll, new Set(Object.keys(DATA.live?.games || {}))), rows = onDay(rowsAll, pickM);
+  $('#move-note').innerHTML = dayNote(pickM, 'lines');
   $('#n-move').textContent = rows.filter(m => m.now < m.open).length;
   if (!rows.length) { $('#move-top').innerHTML = ''; $('#move-games').innerHTML = empty('No lines captured yet.'); return; }
   const liveEv = new Set((DATA.live?.rows || []).map(r => r.event)), now = Date.now(), pregame = m => !m.start || new Date(m.start) > now;
@@ -549,8 +567,8 @@ function armBlock(label, p, pen, team) {
   return `<div class="card px-5 pt-4 pb-1"><div class="pb-3"><div class="mb-0.5 flex items-center gap-1.5">${teamTag(team, 18)}<span class="text-xs text-muted-foreground">· ${label}</span></div><div class="text-base font-semibold tracking-tight">${p ? esc(p.name) : 'TBD'}</div></div>${kv(rows)}${details}</div>`;
 }
 function renderPitch() {
-  const d = DATA.pitch, games = d?.games || []; $('#n-pitch').textContent = games.length;
-  $('#pitch-meta').textContent = games.length ? "Each starter's rating and whether the bullpen behind him is rested." : 'No pitcher data yet.';
+  const d = DATA.pitch, pickP = pickDay(d?.games || [], new Set(Object.keys(DATA.live?.games || {}))), games = onDay(d?.games || [], pickP); $('#n-pitch').textContent = games.length;
+  $('#pitch-meta').innerHTML = games.length ? (pickP.tomorrow ? "Today's games are finished. Showing tomorrow's starters and bullpens." : "Each starter's rating and whether the bullpen behind him is rested.") : 'No pitcher data yet.';
   $('#pitch-games').innerHTML = games.map(g => gameSection(g.event, armBlock('away starter', g.away_sp, g.away_pen, g.away) + armBlock('home starter', g.home_sp, g.home_pen, g.home), DATA.live?.games?.[g.event], g.start, 'sm:grid-cols-2')).join('');
 }
 function renderParlay() {
