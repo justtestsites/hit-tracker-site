@@ -31,7 +31,7 @@
   <section id="live" class="on space-y-6">
     <div class="flex flex-wrap items-center gap-3">
       <input id="live-q" type="search" class="input max-w-xs" placeholder="Player or team">
-      <div class="tabs-list w-full sm:w-auto grid grid-cols-5 sm:inline-flex" id="live-seg"><button class="tabs-trigger px-1 sm:px-3" data-f="targets" data-state="active">Targets</button><button class="tabs-trigger px-1 sm:px-3" data-f="hot" data-state="inactive">Hot bats</button><button class="tabs-trigger px-1 sm:px-3" data-f="streak" data-state="inactive">Streaks</button><button class="tabs-trigger px-1 sm:px-3" data-f="hrr" data-state="inactive"><span class="sm:hidden">H+R+RBI</span><span class="hidden sm:inline">Hit, run, or RBI</span></button><button class="tabs-trigger px-1 sm:px-3" data-f="all" data-state="inactive">Everyone</button></div>
+      <div class="tabs-list w-full sm:w-auto grid grid-cols-5 sm:inline-flex" id="live-seg"><button class="tabs-trigger px-1 sm:px-3" data-f="targets" data-state="active">Targets</button><button class="tabs-trigger px-1 sm:px-3" data-f="hot" data-state="inactive">Hot bats</button><button class="tabs-trigger px-1 sm:px-3" data-f="streak" data-state="inactive">Streaks</button><button class="tabs-trigger px-1 sm:px-3" data-f="hrr" data-state="inactive">H+R+RBI</button><button class="tabs-trigger px-1 sm:px-3" data-f="all" data-state="inactive">Everyone</button></div>
     </div>
     <div id="live-picks"></div>
     <div id="live-games" class="space-y-8"></div>
@@ -42,7 +42,7 @@
   <section id="board" class="space-y-6">
     <div class="flex flex-wrap items-center gap-3">
       <input id="board-q" type="search" class="input max-w-xs" placeholder="Player or team">
-      <div class="tabs-list w-full sm:w-auto grid grid-cols-4 sm:inline-flex" id="board-seg"><button class="tabs-trigger px-1 sm:px-3" data-f="all" data-state="active">All</button><button class="tabs-trigger px-1 sm:px-3" data-f="take" data-state="inactive">Take</button><button class="tabs-trigger px-1 sm:px-3" data-f="hrr" data-state="inactive"><span class="sm:hidden">H+R+RBI</span><span class="hidden sm:inline">Hit, run, or RBI</span></button><button class="tabs-trigger px-1 sm:px-3" data-f="streak" data-state="inactive">Streaks</button></div>
+      <div class="tabs-list w-full sm:w-auto grid grid-cols-4 sm:inline-flex" id="board-seg"><button class="tabs-trigger px-1 sm:px-3" data-f="all" data-state="active">All</button><button class="tabs-trigger px-1 sm:px-3" data-f="take" data-state="inactive">Take</button><button class="tabs-trigger px-1 sm:px-3" data-f="hrr" data-state="inactive">H+R+RBI</button><button class="tabs-trigger px-1 sm:px-3" data-f="streak" data-state="inactive">Streaks</button></div>
     </div>
     <div id="board-note"></div>
     <div id="board-picks"></div>
@@ -115,7 +115,8 @@ const KEY = {
   hrr: ['Hit, run, or RBI', [
     [`<span class="text-take">81%</span> · hit, run, or RBI`, 'The DraftKings prop: 1 or more hits + runs + RBIs. A hit counts, and so does scoring a run or driving one in without a hit. Our chance is the hit chance plus his own season rate of runs scored after walks and RBIs on outs and walks. Green = 78% or better. Orange = under 65%. An average regular is about 72% pregame.'],
     ['0 hits · 0 runs · 0 RBI', 'Where he stands today. Once any of the three is 1 or more the prop is done and the card is dimmed.'],
-    ['Had one in 118 of 140 games', 'How often he has had at least one hit, run, or RBI in a game this season.'],
+    ['This season · had one in 118 of 140 games', 'How often he has had at least one hit, run, or RBI in a game this season.'],
+    ['Streak · 12 games', 'Consecutive games with at least one hit, run, or RBI. In this mode the streak is about the prop, not just hits.'],
   ]],
   targets: ['Filters', [
     ['Targets', 'Hitters who were favored before the game (-150 or better), still have no hit, and can be bought at a better price now than pregame.'],
@@ -512,7 +513,7 @@ function tile(r, v, opts = {}) {
   if (!live) rows.push(['Last 10', l ? `Hit in ${l[0]} of ${l[1]}${dots(r)}` : '—']);
   const lastH = r.last10_hits?.length ? r.last10_hits[r.last10_hits.length - 1] : null;
   const mdl = hitChance(r, opts.meta || null, live);
-  if (hrr) { const hm = hrrChance(r, opts.meta || null, live); if (hm) rows.push(['Chance', `<span class="${hrrCls(hm.pFair)}">${Math.round(hm.pFair * 100)}%</span> <span class="m">· hit, run, or RBI</span><div class="m">${Math.round(hm.pHit * 100)}% for a hit alone</div>${r.hrr_games != null && r.games_season ? `<div class="m">Had one in ${r.hrr_games} of ${r.games_season} games</div>` : ''}`]); }
+  if (hrr) { const hm = hrrChance(r, opts.meta || null, live); if (hm) rows.push(['Chance', `<span class="${hrrCls(hm.pFair)}">${Math.round(hm.pFair * 100)}%</span> <span class="m">· hit, run, or RBI</span><div class="m">${Math.round(hm.pHit * 100)}% for a hit alone</div>`]); }
   else if (mdl) rows.push(['Hit chance', `<span class="${chanceCls(mdl.pFair)}">${Math.round(mdl.pFair * 100)}%</span>${r.odds != null ? ` <span class="m">· FanDuel says ${Math.round((implied(r.odds) - VIG) * 100)}%</span>` : ''}`]);
   { const a = avgOf(r); const main = r.avg == null ? '' : a == null ? `${fmtAvg(r.avg)} <span class="m">· only ${r.ab_season} at bats</span>` : `<span class="${hotBat(r) ? 'text-take' : coldBat(r) ? 'text-risky' : ''}">${fmtAvg(a)}</span>${hotBat(r) ? ' <span class="m">· hot bat</span>' : ''}`; if (main) rows.push(['Average', main]); const vr = vsArmRow(r); if (vr) rows.push(vr); }
   if (mdl) {
@@ -521,6 +522,10 @@ function tile(r, v, opts = {}) {
     if (r.k_ab != null && mdl.arm?.k_ab != null) bits.push(`<div class="m">Strikes out ${Math.round(r.k_ab * 100)}% · ${esc(lastName(mdl.arm.name))} gets ${Math.round(mdl.arm.k_ab * 100)}%</div>`);
     if (bits.length) rows.push(['Matchup', bits.join('')]);
   }
+  if (hrr) {
+    if (r.hrr_games != null && r.games_season) rows.push(['This season', `<span class="whitespace-nowrap">${r.hrr_games} of ${r.games_season} games</span> <span class="m whitespace-nowrap">· ${Math.round(100 * r.hrr_games / r.games_season)}%</span><div class="m">had a hit, run, or RBI</div>`]);
+    rows.push(['Streak', r.hrr_streak == null ? '—' : r.hrr_streak >= 2 ? `${r.hrr_streak} games<div class="m">with a hit, run, or RBI</div>` : r.hrr_streak === 1 ? 'Had one yesterday' : `None${r.hrr_last10 != null ? ` <span class="m">· one in ${r.hrr_last10} of last 10</span>` : ''}`]);
+  } else
   rows.push(['Streak', r.streak == null ? '—' : r.streak >= 2 ? `${r.streak} games${r.streak_hits ? ` <span class="m">· ${r.streak_hits} hits</span>` : ''}` : r.streak === 1 ? `${lastH ? `${lastH} hit${lastH === 1 ? '' : 's'}` : 'Hit'} yesterday` : 'None' + (live && l ? ` <span class="m">· hit in ${l[0]} of last 10</span>` : '')]);
   if (live && r.again && r.again.verdict !== 'unknown') {
     const a = r.again, where = whereUp(a);
@@ -597,7 +602,8 @@ function renderLive() {
   const againCell = r => { const a = r.again; if (!a?.verdict || a.verdict === 'unknown') return '—'; const w = whereUp(a); return `<span class="${againCls(a.verdict)}">${againWord(a.verdict)}</span>${w ? ` · ${w}` : ''}`; };
   const todayCell = r => hrr ? `<span class="text-foreground whitespace-nowrap">${r.hits ?? 0} H · ${r.runs ?? 0} R · ${r.rbi ?? 0} RBI</span>${paWords(r) ? `<div class="text-muted-foreground">${paWords(r)}</div>` : ''}` : `<span class="text-foreground whitespace-nowrap">${r.hits} for ${r.ab}</span>${paWords(r) ? `<div class="text-muted-foreground">${paWords(r)}</div>` : ''}`;
   const liveCols = [{ label: 'Game', hide: 'hidden lg:table-cell', wrap: true }, { label: 'Today', wrap: true, mobileLabel: 'Today:' }, { label: 'Average', mobileLabel: 'Average', wrap: true }, { label: 'Form', hide: 'hidden xl:table-cell', wrap: true }, { label: 'Pitcher', mobileLabel: 'Facing' }, { label: 'Bats again', hide: 'hidden xl:table-cell' }];
-  const liveCells = r => [gameCell(r), todayCell(r), avgCell(r), r.streak >= 3 ? `<span class="text-foreground">${streakText(r)}</span>` : l10Text(r), armCell(r), againCell(r)];
+  const hrrForm = r => r.hrr_streak >= 3 ? `<span class="text-foreground">${r.hrr_streak}-game streak</span> <span class="whitespace-nowrap">(hit, run, or RBI)</span>` : r.hrr_games != null && r.games_season ? `One in ${r.hrr_games} of ${r.games_season} games` : '';
+  const liveCells = r => [gameCell(r), todayCell(r), avgCell(r), hrr ? hrrForm(r) : r.streak >= 3 ? `<span class="text-foreground">${streakText(r)}</span>` : l10Text(r), armCell(r), againCell(r)];
   if (f === 'streak') {
     const hot = withV.filter(x => x.r.streak >= 3 && x.r.hits === 0 && x.v !== 'dead').sort((a, b) => b.r.streak - a.r.streak || a.r.odds - b.r.odds).slice(0, 12);
     $('#live-picks').innerHTML = picksBox(hot, 'Streaks on the line', 'Hitters on a streak of three or more with no hit yet today, longest first.', liveCells, liveCols, r => d.games?.[r.event]);
@@ -635,7 +641,8 @@ function renderBoard() {
   const penCell = r => r.opp_pen ? rateWord(r.opp_pen.health, 'pen') : '—';
   const avgCell = r => { const a = avgOf(r), vs = vsArmText(r); if (a == null && !vs) return '—'; return `${a == null ? '' : `<span class="${hotBat(r) ? 'text-take' : coldBat(r) ? 'text-risky' : 'text-foreground'}">${fmtAvg(a)}</span>`}${vs ? `<div>${vs}</div>` : ''}`; };
   const boardCols = [{ label: 'Game', hide: 'hidden md:table-cell', wrap: true }, { label: 'Average', mobileLabel: 'Average', wrap: true }, { label: 'Form', wrap: true }, { label: 'Pitcher', mobileLabel: 'Facing' }, { label: 'Bullpen', hide: 'hidden lg:table-cell', mobileLabel: 'Bullpen' }];
-  const boardCells = r => [`<div class="whitespace-nowrap">${esc(shortEvent(r.event))}</div><div class="whitespace-nowrap text-muted-foreground">${when(r.start)}</div>`, avgCell(r), r.streak >= 3 ? `<span class="text-foreground">${streakText(r)}</span>` : l10Text(r), armCell(r), penCell(r)];
+  const hrrForm = r => r.hrr_streak >= 3 ? `<span class="text-foreground">${r.hrr_streak}-game streak</span> <span class="whitespace-nowrap">(hit, run, or RBI)</span>` : r.hrr_games != null && r.games_season ? `One in ${r.hrr_games} of ${r.games_season} games` : '';
+  const boardCells = r => [`<div class="whitespace-nowrap">${esc(shortEvent(r.event))}</div><div class="whitespace-nowrap text-muted-foreground">${when(r.start)}</div>`, avgCell(r), hrr ? hrrForm(r) : r.streak >= 3 ? `<span class="text-foreground">${streakText(r)}</span>` : l10Text(r), armCell(r), penCell(r)];
   if (f === 'streak') {
     const hot = withV.filter(x => x.r.streak >= 3).sort((a, b) => b.r.streak - a.r.streak || a.r.odds - b.r.odds).slice(0, 12);
     $('#board-picks').innerHTML = picksBox(hot, 'Longest active hit streaks', 'Consecutive games with at least one hit, longest first.', boardCells, boardCols) || empty('Nobody on the board has a hit streak of three or more.');
