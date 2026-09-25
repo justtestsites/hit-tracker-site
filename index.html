@@ -115,6 +115,7 @@ const KEY = {
   hrr: ['Hit, run, or RBI', [
     [`<span class="text-take">81%</span> · hit, run, or RBI`, 'The DraftKings prop: 1 or more hits + runs + RBIs. A hit counts, and so does scoring a run or driving one in without a hit. Our chance is the hit chance plus his own season rate of runs scored after walks and RBIs on outs and walks. Green = 78% or better. Orange = under 65%. An average regular is about 72% pregame.'],
     ['0 hits · 0 runs · 0 RBI', 'Where he stands today. Once any of the three is 1 or more the prop is done and the card is dimmed.'],
+    ['-372 · DraftKings says 77%', 'The DraftKings price for 1+ hits + runs + RBIs, pulled every few minutes, and the chance it implies with their cut taken out. FanDuel does not offer this prop. "No line pulled" means DraftKings had no line for him or the pull failed.'],
     ['This season · had one in 118 of 140 games', 'How often he has had at least one hit, run, or RBI in a game this season.'],
     ['Streak · 12 games', 'Consecutive games with at least one hit, run, or RBI. In this mode the streak is about the prop, not just hits.'],
   ]],
@@ -499,6 +500,7 @@ const teamTag = (abbr, px = 18) => `<span class="inline-flex items-center gap-1.
 const PEN_WORD = { fresh: 'Fresh', ok: 'Available', taxed: 'Taxed' };
 const rateWord = (w, kind = 'arm') => { if (!w) return ''; const label = kind === 'pen' ? (PEN_WORD[w] || w) : w[0].toUpperCase() + w.slice(1); return `<span class="rate-${w} text-[11px] font-semibold uppercase tracking-wider">${label}</span>`; };
 const cap = w => w ? w[0].toUpperCase() + w.slice(1) : '';
+const tagOnly = (v, tags) => { const vcls = v === 'take' ? 'text-take' : v === 'risky' ? 'text-risky' : 'text-muted-foreground'; return `<div class="text-right shrink-0 pt-1"><div class="text-[11px] font-semibold uppercase tracking-wider ${vcls}">${tags[v]}</div><div class="mt-1 text-xs text-muted-foreground">no line pulled</div></div>`; };
 function price(v, now, pre, tag = true, tags = TAG) {
   const cls = v === 'take' ? 'text-take' : v === 'risky' ? 'text-risky' : v === 'dead' ? 'text-muted-foreground line-through' : 'text-foreground';
   const vcls = v === 'take' ? 'text-take' : v === 'risky' ? 'text-risky' : 'text-muted-foreground';
@@ -513,7 +515,7 @@ function tile(r, v, opts = {}) {
   if (!live) rows.push(['Last 10', l ? `Hit in ${l[0]} of ${l[1]}${dots(r)}` : '—']);
   const lastH = r.last10_hits?.length ? r.last10_hits[r.last10_hits.length - 1] : null;
   const mdl = hitChance(r, opts.meta || null, live);
-  if (hrr) { const hm = hrrChance(r, opts.meta || null, live); if (hm) rows.push(['Chance', `<span class="${hrrCls(hm.pFair)}">${Math.round(hm.pFair * 100)}%</span> <span class="m">· hit, run, or RBI</span><div class="m">${Math.round(hm.pHit * 100)}% for a hit alone</div>`]); }
+  if (hrr) { const hm = hrrChance(r, opts.meta || null, live); if (hm) rows.push(['Chance', `<span class="${hrrCls(hm.pFair)}">${Math.round(hm.pFair * 100)}%</span> <span class="m">· hit, run, or RBI</span>${r.hrr_odds != null ? `<div class="m">DraftKings says ${Math.round((implied(r.hrr_odds) - VIG) * 100)}%</div>` : ''}<div class="m">${Math.round(hm.pHit * 100)}% for a hit alone</div>`]); }
   else if (mdl) rows.push(['Hit chance', `<span class="${chanceCls(mdl.pFair)}">${Math.round(mdl.pFair * 100)}%</span>${r.odds != null ? ` <span class="m">· FanDuel says ${Math.round((implied(r.odds) - VIG) * 100)}%</span>` : ''}`]);
   { const a = avgOf(r); const main = r.avg == null ? '' : a == null ? `${fmtAvg(r.avg)} <span class="m">· only ${r.ab_season} at bats</span>` : `<span class="${hotBat(r) ? 'text-take' : coldBat(r) ? 'text-risky' : ''}">${fmtAvg(a)}</span>${hotBat(r) ? ' <span class="m">· hot bat</span>' : ''}`; if (main) rows.push(['Average', main]); const vr = vsArmRow(r); if (vr) rows.push(vr); }
   if (mdl) {
@@ -544,7 +546,7 @@ function tile(r, v, opts = {}) {
     rows.push(['Bullpen', `${rateWord(p.health, 'pen')}${dn.length ? `<div class="m">${dn.map(lastName).join(', ')} likely out</div>` : ''}${arms ? `<div class="m mt-1">Likely to pitch late</div>${arms}` : ''}`]); }
   const w = wxOf(r.event) || r.weather; if (wxText(w)) rows.push(['Weather', wxText(w, true)]);
   return `<div class="card px-5 pt-4 pb-1 ${v === 'dead' ? 'opacity-50' : ''}">
-    <div class="flex items-start justify-between gap-4 pb-3"><div class="min-w-0"><div class="mb-0.5">${teamTag(r.team, 18)}</div><div class="truncate text-base font-semibold tracking-tight">${esc(r.player)}</div></div>${price(v, r.odds, live ? pre : (opts.preKey ? pre : null), true, hrr ? TAG_HRR : TAG)}</div>
+    <div class="flex items-start justify-between gap-4 pb-3"><div class="min-w-0"><div class="mb-0.5">${teamTag(r.team, 18)}</div><div class="truncate text-base font-semibold tracking-tight">${esc(r.player)}</div></div>${hrr ? (r.hrr_odds != null ? price(v, r.hrr_odds, null, true, TAG_HRR) : tagOnly(v, TAG_HRR)) : price(v, r.odds, live ? pre : (opts.preKey ? pre : null))}</div>
     ${kv(rows)}
   </div>`;
 }
@@ -565,19 +567,19 @@ function gameSection(ev, inner, meta, start, cols = 'sm:grid-cols-2 lg:grid-cols
 }
 function picksBox(list, title, sub, cellsOf, cols, liveMeta = null, prop = null) {
   if (!list.length) return '';
-  const head = `<tr class="border-b border-border text-xs text-muted-foreground"><th class="whitespace-nowrap px-4 py-2 text-left font-medium">Player</th>${cols.map(c => `<th class="whitespace-nowrap px-4 py-2 text-left font-medium ${c.hide || ''}">${c.label}</th>`).join('')}<th class="whitespace-nowrap px-4 py-2 text-right font-medium">Odds</th></tr>`;
+  const head = `<tr class="border-b border-border text-xs text-muted-foreground"><th class="whitespace-nowrap px-4 py-2 text-left font-medium">Player</th>${cols.map(c => `<th class="whitespace-nowrap px-4 py-2 text-left font-medium ${c.hide || ''}">${c.label}</th>`).join('')}<th class="whitespace-nowrap px-4 py-2 text-right font-medium">${prop === 'hrr' ? 'DraftKings' : 'Odds'}</th></tr>`;
   const rows = list.map(({ r, v }) => {
     const cells = cellsOf(r);
     return `<tr class="border-b border-border last:border-0 align-top">
       <td class="px-4 py-3 w-full max-w-0 sm:w-auto sm:max-w-none">
         <div class="hidden sm:flex items-center gap-2 font-semibold"><span class="shrink-0">${logo(r.team, 18)}</span><span class="whitespace-nowrap">${esc(r.player)}</span></div>${(() => { const m = prop === 'hrr' ? hrrChance(r, liveMeta ? liveMeta(r) : null, !!liveMeta) : hitChance(r, liveMeta ? liveMeta(r) : null, !!liveMeta); return m ? `<div class="hidden sm:block text-xs whitespace-nowrap"><span class="${prop === 'hrr' ? hrrCls(m.pFair) : chanceCls(m.pFair)}">${Math.round(m.pFair * 100)}%</span> <span class="text-muted-foreground">${prop === 'hrr' ? 'for a hit, run, or RBI' : 'to get a hit'}</span></div>` : ''; })()}
         <div class="sm:hidden px-1 pt-1">
-          <div class="flex items-start justify-between gap-4 pb-3"><div class="min-w-0"><div class="mb-0.5">${teamTag(r.team, 18)}</div><div class="truncate text-base font-semibold tracking-tight">${esc(r.player)}</div></div>${price(v, r.odds, r.pre, true, prop === 'hrr' ? TAG_HRR : TAG)}</div>
+          <div class="flex items-start justify-between gap-4 pb-3"><div class="min-w-0"><div class="mb-0.5">${teamTag(r.team, 18)}</div><div class="truncate text-base font-semibold tracking-tight">${esc(r.player)}</div></div>${prop === 'hrr' ? (r.hrr_odds != null ? price(v, r.hrr_odds, null, true, TAG_HRR) : tagOnly(v, TAG_HRR)) : price(v, r.odds, r.pre)}</div>
           ${kv([...(() => { const m = prop === 'hrr' ? hrrChance(r, liveMeta ? liveMeta(r) : null, !!liveMeta) : hitChance(r, liveMeta ? liveMeta(r) : null, !!liveMeta); return m ? [[prop === 'hrr' ? 'Chance' : 'Hit chance', `<span class="${prop === 'hrr' ? hrrCls(m.pFair) : chanceCls(m.pFair)}">${Math.round(m.pFair * 100)}%</span>${prop === 'hrr' ? ' <span class="m">· hit, run, or RBI</span>' : ''}`]] : []; })(), ...cells.map((c, i) => [cols[i].label, c]).filter(([, c]) => c && c !== '—')])}
         </div>
       </td>
       ${cells.map((c, i) => `<td class="px-4 py-3 text-[13px] text-muted-foreground ${cols[i].wrap ? 'min-w-[120px]' : 'whitespace-nowrap'} ${cols[i].hide || 'hidden sm:table-cell'}">${c}</td>`).join('')}
-      <td class="hidden sm:table-cell px-4 py-3 text-right whitespace-nowrap"><div class="text-base font-semibold ${v === 'take' ? 'text-take' : 'text-foreground'}">${odds(r.odds)}</div>${r.pre != null && r.pre !== r.odds ? `<div class="text-xs text-muted-foreground">was ${odds(r.pre)}</div>` : ''}</td>
+      ${prop === 'hrr' ? `<td class="hidden sm:table-cell px-4 py-3 text-right whitespace-nowrap"><div class="text-base font-semibold ${v === 'take' ? 'text-take' : 'text-foreground'}">${r.hrr_odds != null ? odds(r.hrr_odds) : '—'}</div></td>` : `<td class="hidden sm:table-cell px-4 py-3 text-right whitespace-nowrap"><div class="text-base font-semibold ${v === 'take' ? 'text-take' : 'text-foreground'}">${odds(r.odds)}</div>${r.pre != null && r.pre !== r.odds ? `<div class="text-xs text-muted-foreground">was ${odds(r.pre)}</div>` : ''}</td>`}
     </tr>`;
   }).join('');
   return `<div class="card"><div class="px-5 pt-4 pb-3"><div class="text-[15px] font-semibold">${title}</div><div class="text-sm text-muted-foreground">${sub}</div></div><div class="border-t border-border overflow-x-auto"><table class="w-full text-sm"><thead class="hidden sm:table-header-group">${head}</thead><tbody>${rows}</tbody></table></div></div>`;
