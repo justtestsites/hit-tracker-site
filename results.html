@@ -258,7 +258,7 @@ function calibrate() {
 }
 const rankOf = (r, meta, live) => { const m = hitChance(r, meta, live); if (m && m.pFair != null) return m.pFair * 100; return r.pre != null ? diffOdds(r.odds, r.pre) / 10 : -1e9; };   // bigger = better pick: the chance of a hit, nothing else
 /* ===== hit + run + RBI (1+): a hit counts, and so does scoring a run or driving one in without a hit ===== */
-const HRR_TAKE = .78, HRR_RISKY = .65;                 // scaled to the prop: an average regular is ~72% pregame, versus ~63% for a hit
+const HRR_TAKE = .75, HRR_RISKY = .62;                 // scaled to the prop: an average regular is ~72% pregame, versus ~63% for a hit
 const hrrTier = P => P == null ? null : P >= HRR_TAKE ? 'take' : P < HRR_RISKY ? 'risky' : 'neutral';
 const hrrCls = P => P == null ? '' : P >= HRR_TAKE ? 'text-take' : P < HRR_RISKY ? 'text-risky' : 'text-foreground';
 const hrrToday = r => (r.hits ?? 0) + (r.runs ?? 0) + (r.rbi ?? 0);
@@ -351,7 +351,8 @@ function tile(r, v, opts = {}) {
   if (live && hrr) rows.push(['Today', `<span class="whitespace-nowrap">${r.hits ?? 0} hit${r.hits === 1 ? '' : 's'}</span> · <span class="whitespace-nowrap">${r.runs ?? 0} run${r.runs === 1 ? '' : 's'}</span> · <span class="whitespace-nowrap">${r.rbi ?? 0} RBI</span>${paWords(r) ? `<div class="m">${paWords(r)}</div>` : ''}`]);
   else if (live) rows.push(['Today', `${r.hits} for ${r.ab}${paWords(r) ? `<div class="m">${paWords(r)}</div>` : (r.pa && r.pa > r.ab ? ` <span class="m">· ${r.pa - r.ab} walk${r.pa - r.ab === 1 ? '' : 's'}</span>` : '')}`]);
   const l = l10n(r);
-  if (!live) rows.push(['Last 10', l ? `Hit in ${l[0]} of ${l[1]}${dots(r)}` : '—']);
+  if (!live && hrr) rows.push(['Last 10', r.hrr_last10 != null ? `Had one in ${r.hrr_last10} of 10 <span class="m">· hit, run, or RBI</span>` : '—']);
+  else if (!live) rows.push(['Last 10', l ? `Hit in ${l[0]} of ${l[1]}${dots(r)}` : '—']);
   const lastH = r.last10_hits?.length ? r.last10_hits[r.last10_hits.length - 1] : null;
   const mdl = hitChance(r, opts.meta || null, live);
   if (hrr) { const hm = hrrChance(r, opts.meta || null, live); if (hm) rows.push(['Chance', `<span class="${hrrCls(hm.pFair)}">${Math.round(hm.pFair * 100)}%</span> <span class="m">· hit, run, or RBI</span>${r.hrr_odds != null ? `<div class="m">DraftKings says ${Math.round((implied(r.hrr_odds) - VIG) * 100)}%</div>` : ''}<div class="m">${Math.round(hm.pHit * 100)}% for a hit alone</div>`]); }
