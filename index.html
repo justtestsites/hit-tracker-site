@@ -226,7 +226,7 @@ const GAME_OVER_AFTER = 4 * 3600e3;       // a game is treated as over 4 hours a
 function pickDay(items, liveEvents) {
   const now = Date.now(), today = dayKey(now);
   const days = [...new Set(items.filter(x => x.start).map(x => dayKey(x.start)))].sort();
-  const stillOn = x => new Date(x.start) > now - GAME_OVER_AFTER || (liveEvents && liveEvents.has(x.event));
+  const stillOn = x => new Date(x.start) > now - GAME_OVER_AFTER || (liveEvents && liveEvents.has(x.event));   // for the Board, items are already filtered to unstarted games
   if (items.some(x => x.start && dayKey(x.start) === today && stillOn(x))) return { day: today, tomorrow: false };
   const next = days.find(dk => dk > today);
   return next ? { day: next, tomorrow: true } : { day: today, tomorrow: false };
@@ -399,7 +399,7 @@ function calibrate() {
   const ratios = (DATA.board?.lines || []).map(r => { const m = hitChance(r, null, false); return m && r.odds != null ? (implied(r.odds) - VIG) / m.p : null; }).filter(x => x != null && isFinite(x)).sort((a, b) => a - b);
   if (ratios.length >= 15) MODEL_SCALE = Math.min(1.25, Math.max(0.75, ratios[Math.floor(ratios.length / 2)]));
 }
-const rankOf = (r, meta, live) => { const m = hitChance(r, meta, live); if (m && m.edge != null) return m.edge * 100; return r.pre != null ? diffOdds(r.odds, r.pre) / 10 : -1e9; };   // bigger = better pick
+const rankOf = (r, meta, live) => { const m = hitChance(r, meta, live); if (m && m.pFair != null) return m.pFair * 100 + (m.edge || 0); return r.pre != null ? diffOdds(r.odds, r.pre) / 10 : -1e9; };   // bigger = better pick: chance first, edge breaks ties
 const edgeCls = e => e == null ? '' : e >= .04 ? 'text-take' : e <= -.04 ? 'text-risky' : 'text-foreground';
 function legModel(r, meta) {
   const m = hitChance(r, meta, true);
@@ -554,7 +554,7 @@ function renderLive() {
     $('#live-picks').innerHTML = picksBox(hb, 'Hot bats still hitless', `Hitting ${fmtAvg(HOT_AVG)} or better this season, no hit yet, 4th inning or later, and due to bat again. Highest average first.`, liveCells, liveCols, r => d.games?.[r.event]);
   } else {
     const takes = withV.filter(x => x.v === 'take' && isTarget(x.r)).sort((a, b) => rankOf(b.r, d.games?.[b.r.event], true) - rankOf(a.r, d.games?.[a.r.event], true));
-    $('#live-picks').innerHTML = picksBox(takes, 'Best spots right now', 'Favored before the game, no hit yet, more at bats coming, and a better price than pregame.', liveCells, liveCols, r => d.games?.[r.event]);
+    $('#live-picks').innerHTML = picksBox(takes, 'Best spots right now', 'Favored before the game, no hit yet, more at bats coming, a better price than pregame, and our chance beats that price. Most likely to get a hit first.', liveCells, liveCols, r => d.games?.[r.event]);
   }
   const keep = withV.filter(({ r, v }) => matchQ(r, q) && (f === 'all' || (f === 'targets' && isTarget(r)) || (f === 'streak' && r.streak >= 3 && r.hits === 0) || (f === 'hot' && isHotSpot(r, d.games?.[r.event]))));
   const order = { take: 0, neutral: 1, risky: 2, dead: 3 }, innOf = ev => inningNum(d.games?.[ev]?.inning) ?? 99;
@@ -570,8 +570,9 @@ function renderBoard() {
   const d = DATA.board, q = ($('#board-q').value || '').toLowerCase(), f = F.board;
   $('#n-board').textContent = d?.lines?.length ?? 0;
   if (!d?.lines) { $('#board-games').innerHTML = empty('No board yet.'); return; }
-  const liveEv0 = new Set(Object.keys(DATA.live?.games || {})), pick = pickDay(d.lines, liveEv0);
-  const withV = onDay(d.lines, pick).map(r => ({ r, v: verdictPre(r) }));
+  const nowMs = Date.now(), upcoming = d.lines.filter(l => !l.start || new Date(l.start) > nowMs);        // started games live on the Live tab, at live prices
+  const pick = pickDay(upcoming, null);
+  const withV = onDay(upcoming, pick).map(r => ({ r, v: verdictPre(r) }));
   $('#board-note').innerHTML = dayNote(pick, 'board');
   const armCell = r => r.opp_sp?.name ? `<span class="whitespace-nowrap">${esc(lastName(r.opp_sp.name))}${r.opp_sp.rating ? ` ${rateWord(r.opp_sp.rating)}` : ''}</span>` : '—';
   const penCell = r => r.opp_pen ? rateWord(r.opp_pen.health, 'pen') : '—';
@@ -583,7 +584,7 @@ function renderBoard() {
     $('#board-picks').innerHTML = picksBox(hot, 'Longest active hit streaks', 'Consecutive games with at least one hit, longest first.', boardCells, boardCols) || empty('Nobody on the board has a hit streak of three or more.');
   } else {
     const takes = withV.filter(x => x.v === 'take').sort((a, b) => rankOf(b.r, null, false) - rankOf(a.r, null, false) || a.r.odds - b.r.odds).slice(0, 12);
-    $('#board-picks').innerHTML = picksBox(takes, 'Strongest pregame spots', 'Where our hit chance beats the price by the most, best first. These are the names to watch once the games start.', boardCells, boardCols);
+    $('#board-picks').innerHTML = picksBox(takes, 'Strongest pregame spots', 'Every hitter whose chance beats his price by 4 points or more, most likely to get a hit first. These are the names to watch once the games start.', boardCells, boardCols);
   }
   const keep = withV.filter(({ r, v }) => matchQ(r, q) && (f === 'all' || (f === 'take' && v === 'take') || (f === 'streak' && r.streak >= 3)));
   const games = [...groupBy(keep, x => x.r.event)].sort((a, b) => (a[1][0].r.start || '').localeCompare(b[1][0].r.start || ''));
