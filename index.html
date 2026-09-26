@@ -113,7 +113,7 @@ const KEY = {
     [`<span class="text-risky">Orange odds</span>`, 'He is Risky: under 58%.'],
   ]],
   hrr: ['Hit, run, or RBI', [
-    [`<span class="text-take">81%</span> · hit, run, or RBI`, 'The DraftKings prop: 1 or more hits + runs + RBIs. A hit counts, and so does scoring a run or driving one in without a hit. Our chance is the hit chance plus his own season rate of runs scored after walks and RBIs on outs and walks. Green = 75% or better. Orange = under 62%.'],
+    [`<span class="text-take">81%</span> · hit, run, or RBI`, 'The DraftKings prop: 1 or more hits + runs + RBIs. A hit counts, and so does scoring a run or driving one in without a hit. Our chance is the hit chance plus his own season rate of runs scored after walks and RBIs on outs and walks. Green = 65% or better. Orange = under 58%, the same bars as the hit prop.'],
     ['0 hits · 0 runs · 0 RBI', 'Where he stands today. Once any of the three is 1 or more the prop is done and the card is dimmed.'],
     ['-372 · DraftKings says 77%', 'The DraftKings price for 1+ hits + runs + RBIs, pulled every few minutes, and the chance it implies with their cut taken out. FanDuel does not offer this prop. "No line pulled" means DraftKings had no line for him or the pull failed.'],
     ['This season · had one in 118 of 140 games', 'How often he has had at least one hit, run, or RBI in a game this season.'],
@@ -123,7 +123,7 @@ const KEY = {
     ['Picks', 'Every hitless hitter we give a 60% or better chance of a hit from here. Anyone under 60% is not shown; he is under Everyone. Take (green) starts at 65%.'],
     ['Hot bats', 'The Picks who are also batting .270 or better this season, in the 4th inning or later, and due to bat again.'],
     ['Streaks', 'The Picks who also have a hit in 3 or more games in a row.'],
-    ['H+R+RBI', 'Everyone still without a hit, run, or RBI that we give a 65% or better chance of getting one of the three, judged on the DraftKings 1+ hits + runs + RBIs prop. The floor is higher because most regulars sit around 72% on this prop.'],
+    ['H+R+RBI', 'Everyone still without a hit, run, or RBI that we give a 60% or better chance of getting one of the three, judged on the DraftKings 1+ hits + runs + RBIs prop. Same bars as hits: shown at 60%, Take at 65%.'],
     ['Everyone', 'Every hitter with a FanDuel line in a live game, no floor.'],
     ['.150 vs Skenes · 3 for 20', 'His career average against the pitcher on the mound right now, and the count behind it. It switches to the reliever when one comes in. Colored only once there are 10 or more plate appearances; small counts are mostly luck.'],
   ]],
@@ -159,7 +159,7 @@ const KEY = {
   ]],
   board: ['Filters', [
     ['Picks', 'Every hitter on today\'s board we give a 60% or better chance of a hit. Under 60% is not shown; he is under Everyone. Take (green) starts at 65%.'],
-    ['H+R+RBI', 'The board judged on the DraftKings 1+ hits + runs + RBIs prop, 65% or better only. Take there means 75% or better.'],
+    ['H+R+RBI', 'The board judged on the DraftKings 1+ hits + runs + RBIs prop. Same bars as hits: shown at 60%, Take at 65%.'],
     ['Streaks', 'The Picks who also have a hit in 3 or more games in a row.'],
     ['Everyone', 'Every hitter with a FanDuel line today, no floor.'],
   ]],
@@ -357,7 +357,7 @@ function remainingPA(inn, pa) {
 const LG = { con: .327, k: .250, bb: .085 };          // league: contact average (hits per non-strikeout at bat), strikeouts per at bat, walks+HBP per PA
 const VIG = .022;                                     // roughly what FanDuel bakes into one side of a hit line
 const TAKE_P = .65, RISKY_P = .58;                    // verdicts are about the chance of a hit, not the price: pick'em apps pay the same either way
-const SHOW_P = .60, SHOW_HRR = .65;                   // the floor: hitters under this chance are not shown at all (except under Everyone)
+const SHOW_P = .60, SHOW_HRR = .60;                   // the floor: hitters under this chance are not shown at all (except under Everyone)
 const tierOf = P => P == null ? null : P >= TAKE_P ? 'take' : P < RISKY_P ? 'risky' : 'neutral';
 const chanceCls = P => P == null ? '' : P >= TAKE_P ? 'text-take' : P < RISKY_P ? 'text-risky' : 'text-foreground';
 const PARK = { COL: 1.16, BOS: 1.07, KC: 1.05, CIN: 1.04, ARI: 1.03, TEX: 1.02, BAL: 1.02, PHI: 1.01, MIN: 1.01, CHC: 1.01, WSH: 1.01, HOU: 1.0, TOR: 1.0, ATL: 1.0, LAA: 1.0, CWS: 1.0, MIL: 1.0, STL: .99, PIT: .99, NYY: .99, CLE: .98, DET: .98, LAD: .98, TB: .97, MIA: .97, SD: .96, NYM: .96, SF: .95, ATH: .94, OAK: .94, SEA: .93 };
@@ -436,7 +436,7 @@ function calibrate() {
 }
 const rankOf = (r, meta, live) => { const m = hitChance(r, meta, live); if (m && m.pFair != null) return m.pFair * 100; return r.pre != null ? diffOdds(r.odds, r.pre) / 10 : -1e9; };   // bigger = better pick: the chance of a hit, nothing else
 /* ===== hit + run + RBI (1+): a hit counts, and so does scoring a run or driving one in without a hit ===== */
-const HRR_TAKE = .75, HRR_RISKY = .62;                 // scaled to the prop: an average regular is ~72% pregame, versus ~63% for a hit
+const HRR_TAKE = .65, HRR_RISKY = .58;                 // same bars as the hit prop: one rule everywhere (day-one results: 65%+ cashed 82%, 60%+ cashed 73%)
 const hrrTier = P => P == null ? null : P >= HRR_TAKE ? 'take' : P < HRR_RISKY ? 'risky' : 'neutral';
 const hrrCls = P => P == null ? '' : P >= HRR_TAKE ? 'text-take' : P < HRR_RISKY ? 'text-risky' : 'text-foreground';
 const hrrToday = r => (r.hits ?? 0) + (r.runs ?? 0) + (r.rbi ?? 0);
@@ -468,7 +468,7 @@ function verdictHRR(r, meta, live) {
   return m ? m.tier : 'neutral';   // no data = nothing to say
 }
 const rankHRR = (r, meta, live) => { const m = hrrChance(r, meta, live); return m ? m.pFair * 100 : -1e9; };
-// does he clear the floor? Under 60% for a hit (65% for hit, run, or RBI) a hitter is not shown at all, except under Everyone
+// does he clear the floor? Under 60% a hitter is not shown at all, except under Everyone (same floor for both props)
 const clears = (r, meta, live, hrr) => { const m = hrr ? hrrChance(r, meta, live) : hitChance(r, meta, live); return !!m && m.pFair >= (hrr ? SHOW_HRR : SHOW_P); };
 const edgeCls = e => e == null ? '' : e >= .04 ? 'text-take' : e <= -.04 ? 'text-risky' : 'text-foreground';
 function legModel(r, meta) {
