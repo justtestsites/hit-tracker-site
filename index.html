@@ -446,7 +446,7 @@ function verdictHRR(r, meta, live) {
   const inn = inningNum(meta?.inning) ?? inningNum(r.inning) ?? 1;
   if (live && inn >= 8 && ag !== 'yes' && ag !== 'likely') return 'risky';
   const m = hrrChance(r, meta, live);
-  return m ? m.tier : 'neutral';
+  return m ? m.tier : 'neutral';   // no data = nothing to say
 }
 const rankHRR = (r, meta, live) => { const m = hrrChance(r, meta, live); return m ? m.pFair * 100 : -1e9; };
 const edgeCls = e => e == null ? '' : e >= .04 ? 'text-take' : e <= -.04 ? 'text-risky' : 'text-foreground';
@@ -611,13 +611,13 @@ function renderLive() {
     const hot = withV.filter(x => x.r.streak >= 3 && x.r.hits === 0 && x.v !== 'dead').sort((a, b) => b.r.streak - a.r.streak || a.r.odds - b.r.odds).slice(0, 12);
     $('#live-picks').innerHTML = picksBox(hot, 'Streaks on the line', 'Hitters on a streak of three or more with no hit yet today, longest first.', liveCells, liveCols, r => d.games?.[r.event]);
   } else if (hrr) {
-    const hb = withV.filter(x => hrrToday(x.r) === 0 && x.v !== 'dead' && x.v !== 'risky').sort((a, b) => rankHRR(b.r, d.games?.[b.r.event], true) - rankHRR(a.r, d.games?.[a.r.event], true)).slice(0, 12);
+    const hb = withV.filter(x => hrrToday(x.r) === 0 && x.v !== 'dead' && x.v !== 'risky' && hrrChance(x.r, d.games?.[x.r.event], true)).sort((a, b) => rankHRR(b.r, d.games?.[b.r.event], true) - rankHRR(a.r, d.games?.[a.r.event], true)).slice(0, 12);
     $('#live-picks').innerHTML = picksBox(hb, 'Best hit, run, or RBI spots', 'No hit, run, or RBI yet, at bats coming, and the best chance of getting one of the three from here. Most likely first.', liveCells, liveCols, r => d.games?.[r.event], 'hrr');
   } else if (f === 'hot') {
     const hb = withV.filter(x => isHotSpot(x.r, d.games?.[x.r.event]) && x.v !== 'dead').sort((a, b) => rankOf(b.r, d.games?.[b.r.event], true) - rankOf(a.r, d.games?.[a.r.event], true) || avgOf(b.r) - avgOf(a.r)).slice(0, 12);
     $('#live-picks').innerHTML = picksBox(hb, 'Hot bats still hitless', `Hitting ${fmtAvg(HOT_AVG)} or better this season, no hit yet, 4th inning or later, and due to bat again. Highest average first.`, liveCells, liveCols, r => d.games?.[r.event]);
   } else {
-    const takes = withV.filter(x => x.v === 'take' && isTarget(x.r)).sort((a, b) => rankOf(b.r, d.games?.[b.r.event], true) - rankOf(a.r, d.games?.[a.r.event], true));
+    const takes = withV.filter(x => x.v === 'take' && isTarget(x.r) && hitChance(x.r, d.games?.[x.r.event], true)).sort((a, b) => rankOf(b.r, d.games?.[b.r.event], true) - rankOf(a.r, d.games?.[a.r.event], true));
     $('#live-picks').innerHTML = picksBox(takes, 'Best spots right now', 'Still hitless with at bats coming, and a 70% or better chance of a hit from here. Most likely first.', liveCells, liveCols, r => d.games?.[r.event]);
   }
   const keep = withV.filter(({ r, v }) => matchQ(r, q) && (f === 'all' || (f === 'targets' && isTarget(r)) || (f === 'streak' && r.streak >= 3 && r.hits === 0) || (f === 'hot' && isHotSpot(r, d.games?.[r.event])) || (f === 'hrr' && hrrToday(r) === 0)));
@@ -650,10 +650,10 @@ function renderBoard() {
     const hot = withV.filter(x => x.r.streak >= 3).sort((a, b) => b.r.streak - a.r.streak || a.r.odds - b.r.odds).slice(0, 12);
     $('#board-picks').innerHTML = picksBox(hot, 'Longest active hit streaks', 'Consecutive games with at least one hit, longest first.', boardCells, boardCols) || empty('Nobody on the board has a hit streak of three or more.');
   } else if (hrr) {
-    const takes = withV.filter(x => x.v === 'take').sort((a, b) => rankHRR(b.r, null, false) - rankHRR(a.r, null, false)).slice(0, 12);
+    const takes = withV.filter(x => x.v === 'take' && hrrChance(x.r, null, false)).sort((a, b) => rankHRR(b.r, null, false) - rankHRR(a.r, null, false)).slice(0, 12);
     $('#board-picks').innerHTML = picksBox(takes, 'Strongest hit, run, or RBI spots', `Every hitter we give a ${Math.round(HRR_TAKE * 100)}% or better chance of a hit, a run, or an RBI today. Most likely first.`, boardCells, boardCols, null, 'hrr') || empty('Nobody clears the bar today.');
   } else {
-    const takes = withV.filter(x => x.v === 'take').sort((a, b) => rankOf(b.r, null, false) - rankOf(a.r, null, false) || a.r.odds - b.r.odds).slice(0, 12);
+    const takes = withV.filter(x => x.v === 'take' && hitChance(x.r, null, false)).sort((a, b) => rankOf(b.r, null, false) - rankOf(a.r, null, false) || a.r.odds - b.r.odds).slice(0, 12);
     $('#board-picks').innerHTML = picksBox(takes, 'Strongest pregame spots', 'Every hitter we give a 70% or better chance of a hit, most likely first. These are the names to watch once the games start.', boardCells, boardCols);
   }
   const keep = withV.filter(({ r, v }) => matchQ(r, q) && (f === 'all' || (f === 'take' && v === 'take') || (f === 'hrr') || (f === 'streak' && r.streak >= 3)));
