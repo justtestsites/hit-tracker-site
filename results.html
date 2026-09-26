@@ -285,7 +285,7 @@ function verdictHRR(r, meta, live) {
   const inn = inningNum(meta?.inning) ?? inningNum(r.inning) ?? 1;
   if (live && inn >= 8 && ag !== 'yes' && ag !== 'likely') return 'risky';
   const m = hrrChance(r, meta, live);
-  return m ? m.tier : 'neutral';
+  return m ? m.tier : 'neutral';   // no data = nothing to say
 }
 const rankHRR = (r, meta, live) => { const m = hrrChance(r, meta, live); return m ? m.pFair * 100 : -1e9; };
 const edgeCls = e => e == null ? '' : e >= .04 ? 'text-take' : e <= -.04 ? 'text-risky' : 'text-foreground';
