@@ -190,7 +190,7 @@ function remainingPA(inn, pa) {
 const LG = { con: .327, k: .250, bb: .085 };          // league: contact average (hits per non-strikeout at bat), strikeouts per at bat, walks+HBP per PA
 const VIG = .022;                                     // roughly what FanDuel bakes into one side of a hit line
 const TAKE_P = .65, RISKY_P = .58;                    // verdicts are about the chance of a hit, not the price: pick'em apps pay the same either way
-const SHOW_P = .60, SHOW_HRR = .65;                   // the floor: hitters under this chance are not shown at all (except under Everyone)
+const SHOW_P = .60, SHOW_HRR = .60;                   // the floor: hitters under this chance are not shown at all (except under Everyone)
 const tierOf = P => P == null ? null : P >= TAKE_P ? 'take' : P < RISKY_P ? 'risky' : 'neutral';
 const chanceCls = P => P == null ? '' : P >= TAKE_P ? 'text-take' : P < RISKY_P ? 'text-risky' : 'text-foreground';
 const PARK = { COL: 1.16, BOS: 1.07, KC: 1.05, CIN: 1.04, ARI: 1.03, TEX: 1.02, BAL: 1.02, PHI: 1.01, MIN: 1.01, CHC: 1.01, WSH: 1.01, HOU: 1.0, TOR: 1.0, ATL: 1.0, LAA: 1.0, CWS: 1.0, MIL: 1.0, STL: .99, PIT: .99, NYY: .99, CLE: .98, DET: .98, LAD: .98, TB: .97, MIA: .97, SD: .96, NYM: .96, SF: .95, ATH: .94, OAK: .94, SEA: .93 };
@@ -269,7 +269,7 @@ function calibrate() {
 }
 const rankOf = (r, meta, live) => { const m = hitChance(r, meta, live); if (m && m.pFair != null) return m.pFair * 100; return r.pre != null ? diffOdds(r.odds, r.pre) / 10 : -1e9; };   // bigger = better pick: the chance of a hit, nothing else
 /* ===== hit + run + RBI (1+): a hit counts, and so does scoring a run or driving one in without a hit ===== */
-const HRR_TAKE = .75, HRR_RISKY = .62;                 // scaled to the prop: an average regular is ~72% pregame, versus ~63% for a hit
+const HRR_TAKE = .65, HRR_RISKY = .58;                 // same bars as the hit prop: one rule everywhere (day-one results: 65%+ cashed 82%, 60%+ cashed 73%)
 const hrrTier = P => P == null ? null : P >= HRR_TAKE ? 'take' : P < HRR_RISKY ? 'risky' : 'neutral';
 const hrrCls = P => P == null ? '' : P >= HRR_TAKE ? 'text-take' : P < HRR_RISKY ? 'text-risky' : 'text-foreground';
 const hrrToday = r => (r.hits ?? 0) + (r.runs ?? 0) + (r.rbi ?? 0);
@@ -301,7 +301,7 @@ function verdictHRR(r, meta, live) {
   return m ? m.tier : 'neutral';   // no data = nothing to say
 }
 const rankHRR = (r, meta, live) => { const m = hrrChance(r, meta, live); return m ? m.pFair * 100 : -1e9; };
-// does he clear the floor? Under 60% for a hit (65% for hit, run, or RBI) a hitter is not shown at all, except under Everyone
+// does he clear the floor? Under 60% a hitter is not shown at all, except under Everyone (same floor for both props)
 const clears = (r, meta, live, hrr) => { const m = hrr ? hrrChance(r, meta, live) : hitChance(r, meta, live); return !!m && m.pFair >= (hrr ? SHOW_HRR : SHOW_P); };
 const edgeCls = e => e == null ? '' : e >= .04 ? 'text-take' : e <= -.04 ? 'text-risky' : 'text-foreground';
 function legModel(r, meta) {
@@ -498,7 +498,11 @@ function evaluate(days) {
         const m = hitChance(r, meta, live);
         const v = live ? verdictLive(r, meta) : verdictPre(r);
         const hit = live ? (e.final.hits > (e.hits ?? 0)) : (e.final.hits >= 1);
-        const rec = { ...e, v, m, hit, live, day: day.date };
+        // the hit, run, or RBI prop: graded the same way, from the moment he still had none of the three
+        const nowHRR = live ? ((e.hits ?? 0) + (e.runs ?? 0) + (e.rbi ?? 0)) : 0, finHRR = (e.final.hits ?? 0) + (e.final.runs ?? 0) + (e.final.rbi ?? 0);
+        const hm = nowHRR === 0 && e.final.runs != null ? hrrChance(r, meta, live) : null;
+        const hrrHit = finHRR > nowHRR;
+        const rec = { ...e, v, m, hm, hit, hrrHit, live, day: day.date };
         out.entries.push(rec);
         if (!live) { out.preAll.push(rec); if (v === 'take') out.preTakes.push(rec); continue; }
         if (v === 'take' && !firstTake) firstTake = rec;
@@ -536,8 +540,19 @@ function render(days) {
     table(['Model said', 'Moments', 'Model said (avg)', 'Actually hit', 'Book said'], calRows, [1, 2, 3, 4], [2, 4])));
   // where the live Take bar could sit: first moment per hitter per game at or above each bar, and how often he then got a hit
   const barRows = [.60, .62, .65, .70].map(bar => { const seen = new Set(), xs = []; for (const e of R.entries.filter(e => e.live && e.m && e.m.pFair != null).sort((x, y) => (x.t || '').localeCompare(y.t || ''))) { const k = `${e.day}|${e.event}|${e.player}`; if (seen.has(k) || e.m.pFair < bar) continue; seen.add(k); xs.push(e); } if (!xs.length) return null; const st = stat(xs); return [`${Math.round(bar * 100)}% or better`, st.n, `<span class="${st.rate >= .58 ? 'text-take' : st.rate < .5 ? 'text-risky' : ''}">${pct(st.rate)}</span>`, pct(st.avgBook)]; }).filter(Boolean);
-  blocks.push(block('Where should the live Take bar be?', 'Every hitter counted once per game, at the first moment the model gave him at least this chance. Hit rate = got a hit after that moment. The bar is 70% today; green = clears the 58% a two-leg ticket needs.',
+  blocks.push(block('Where should the live Take bar be?', `Every hitter counted once per game, at the first moment the model gave him at least this chance. Hit rate = got a hit after that moment. Take is ${Math.round(TAKE_P * 100)}% today and hitters under ${Math.round(SHOW_P * 100)}% are not shown; green = clears the 58% a two-leg ticket needs.`,
     table(['Bar', 'Picks', 'Hit rate', 'Book said'], barRows, [1, 2, 3], [3])));
+  // hit, run, or RBI: the same two checks on the other prop
+  const liveH = R.entries.filter(e => e.live && e.hm && e.hm.pFair != null);
+  if (liveH.length) {
+    const hb = [[0, .5], [.5, .6], [.6, .7], [.7, .8], [.8, 1.01]];
+    const hcal = hb.map(([a, b]) => { const xs = liveH.filter(e => e.hm.pFair >= a && e.hm.pFair < b); const n = xs.length; if (!n) return null; const avgP = xs.reduce((s, e) => s + e.hm.pFair, 0) / n, act = xs.filter(e => e.hrrHit).length / n; return [`${Math.round(a * 100)}–${Math.round(Math.min(b, 1) * 100)}%`, n, pct(avgP), `<span class="${act >= avgP + .04 ? 'text-take' : act <= avgP - .04 ? 'text-risky' : ''}">${pct(act)}</span>`]; }).filter(Boolean);
+    blocks.push(block('Is the hit, run, or RBI chance honest?', 'Every live moment where he still had no hit, run, or RBI, grouped by what the model said. "Actually got one" = he had a hit, a run, or an RBI after that moment.',
+      table(['Model said', 'Moments', 'Model said (avg)', 'Actually got one'], hcal, [1, 2, 3], [2])));
+    const hbar = [.60, .65, .70, .75].map(bar => { const seen = new Set(), xs = []; for (const e of [...liveH].sort((x, y) => (x.t || '').localeCompare(y.t || ''))) { const k = `${e.day}|${e.event}|${e.player}`; if (seen.has(k) || e.hm.pFair < bar) continue; seen.add(k); xs.push(e); } if (!xs.length) return null; const n = xs.length, rate = xs.filter(e => e.hrrHit).length / n; return [`${Math.round(bar * 100)}% or better`, n, `<span class="${n >= 10 && rate >= BREAK_EVEN ? 'text-take' : n >= 10 && rate < .5 ? 'text-risky' : ''}">${pct(rate)}</span>`]; }).filter(Boolean);
+    blocks.push(block('Where should the hit, run, or RBI bar be?', `Every hitter counted once per game, at the first moment the model gave him at least this chance with none of the three yet. Take is ${Math.round(HRR_TAKE * 100)}% today and hitters under ${Math.round(SHOW_HRR * 100)}% are not shown.`,
+      table(['Bar', 'Picks', 'Got one'], hbar, [1, 2], [])));
+  }
   // takes by inning and by price
   const innOf = e => inningNum(e.inning) || 0;
   const innRows = [['1st–3rd', e => innOf(e) <= 3], ['4th–6th', e => innOf(e) >= 4 && innOf(e) <= 6], ['7th or later', e => innOf(e) >= 7]].map(([l, f]) => { const xs = R.takes.filter(f); return xs.length ? statRow(l, stat(xs)) : null; }).filter(Boolean);
