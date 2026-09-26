@@ -30,7 +30,7 @@
 /* ===== logic (shared) ===== */
 const $ = s => document.querySelector(s);
 let DATA = { live: null, report: null, board: null, move: null, pitch: null, status: null };
-const F = { live: 'targets', board: 'all', move: 'all', parlay: '3' };
+const F = { live: 'picks', board: 'picks', move: 'all', parlay: '3' };
 async function get(p) { try { const r = await fetch(p + '?t=' + Date.now(), { cache: 'no-store' }); return r.ok ? await r.json() : null; } catch { return null; } }
 const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const odds = o => o == null ? '—' : (o > 0 ? '+' + o : String(o));
@@ -189,7 +189,8 @@ function remainingPA(inn, pa) {
 /* ===== matchup model: per-at-bat hit chance from who he is, who he is facing, where, and when ===== */
 const LG = { con: .327, k: .250, bb: .085 };          // league: contact average (hits per non-strikeout at bat), strikeouts per at bat, walks+HBP per PA
 const VIG = .022;                                     // roughly what FanDuel bakes into one side of a hit line
-const TAKE_P = .70, RISKY_P = .58;                    // verdicts are about the chance of a hit, not the price: pick'em apps pay the same either way
+const TAKE_P = .65, RISKY_P = .58;                    // verdicts are about the chance of a hit, not the price: pick'em apps pay the same either way
+const SHOW_P = .60, SHOW_HRR = .65;                   // the floor: hitters under this chance are not shown at all (except under Everyone)
 const tierOf = P => P == null ? null : P >= TAKE_P ? 'take' : P < RISKY_P ? 'risky' : 'neutral';
 const chanceCls = P => P == null ? '' : P >= TAKE_P ? 'text-take' : P < RISKY_P ? 'text-risky' : 'text-foreground';
 const PARK = { COL: 1.16, BOS: 1.07, KC: 1.05, CIN: 1.04, ARI: 1.03, TEX: 1.02, BAL: 1.02, PHI: 1.01, MIN: 1.01, CHC: 1.01, WSH: 1.01, HOU: 1.0, TOR: 1.0, ATL: 1.0, LAA: 1.0, CWS: 1.0, MIL: 1.0, STL: .99, PIT: .99, NYY: .99, CLE: .98, DET: .98, LAD: .98, TB: .97, MIA: .97, SD: .96, NYM: .96, SF: .95, ATH: .94, OAK: .94, SEA: .93 };
@@ -300,6 +301,8 @@ function verdictHRR(r, meta, live) {
   return m ? m.tier : 'neutral';   // no data = nothing to say
 }
 const rankHRR = (r, meta, live) => { const m = hrrChance(r, meta, live); return m ? m.pFair * 100 : -1e9; };
+// does he clear the floor? Under 60% for a hit (65% for hit, run, or RBI) a hitter is not shown at all, except under Everyone
+const clears = (r, meta, live, hrr) => { const m = hrr ? hrrChance(r, meta, live) : hitChance(r, meta, live); return !!m && m.pFair >= (hrr ? SHOW_HRR : SHOW_P); };
 const edgeCls = e => e == null ? '' : e >= .04 ? 'text-take' : e <= -.04 ? 'text-risky' : 'text-foreground';
 function legModel(r, meta) {
   const m = hitChance(r, meta, true);
@@ -322,7 +325,8 @@ function parlayLegs() {
     if (r.again?.verdict === 'unlikely' || r.again?.verdict === 'maybe' || r.again?.verdict === 'last') continue;
     if (wxRain(wxOf(r.event) || r.weather)) continue;                                   // never build a ticket through a rain game
     const v = verdictLive(r, meta); if (v === 'dead') continue;                          // ranked purely by chance of a hit from here
-    legs.push({ r, meta, v, m: legModel(r, meta) });
+    const lm = legModel(r, meta); if (lm.p < SHOW_P) continue;                              // never build a ticket from a hitter under the floor
+    legs.push({ r, meta, v, m: lm });
   }
   legs.sort((a, b) => b.m.p - a.m.p);
   return { legs, games: new Set(legs.map(x => x.r.event)).size };
