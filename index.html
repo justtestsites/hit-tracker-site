@@ -516,7 +516,7 @@ function tile(r, v, opts = {}) {
   else if (!live) rows.push(['Last 10', l ? `Hit in ${l[0]} of ${l[1]}${dots(r)}` : '—']);
   const lastH = r.last10_hits?.length ? r.last10_hits[r.last10_hits.length - 1] : null;
   const mdl = hitChance(r, opts.meta || null, live);
-  if (hrr) { const hm = hrrChance(r, opts.meta || null, live); if (hm) rows.push(['Chance', `<span class="${hrrCls(hm.pFair)}">${Math.round(hm.pFair * 100)}%</span> <span class="m">· hit, run, or RBI</span>${r.hrr_odds != null ? `<div class="m">DraftKings says ${Math.round((implied(r.hrr_odds) - VIG) * 100)}%</div>` : ''}<div class="m">${Math.round(hm.pHit * 100)}% for a hit alone</div>`]); }
+  if (hrr) { const hm = hrrChance(r, opts.meta || null, live); if (hm) rows.push(['Chance', `<span class="${hrrCls(hm.pFair)}">${Math.round(hm.pFair * 100)}%</span> <span class="m">· hit, run, or RBI</span>${r.hrr_odds != null ? `<div class="m">DraftKings${r.hrr_live ? ' live' : ''} says ${Math.round((implied(r.hrr_odds) - VIG) * 100)}%</div>` : ''}<div class="m">${Math.round(hm.pHit * 100)}% for a hit alone</div>`]); }
   else if (mdl) rows.push(['Hit chance', `<span class="${chanceCls(mdl.pFair)}">${Math.round(mdl.pFair * 100)}%</span>${r.odds != null ? ` <span class="m">· FanDuel says ${Math.round((implied(r.odds) - VIG) * 100)}%</span>` : ''}`]);
   { const a = avgOf(r); const main = r.avg == null ? '' : a == null ? `${fmtAvg(r.avg)} <span class="m">· only ${r.ab_season} at bats</span>` : `<span class="${hotBat(r) ? 'text-take' : coldBat(r) ? 'text-risky' : ''}">${fmtAvg(a)}</span>${hotBat(r) ? ' <span class="m">· hot bat</span>' : ''}`; if (main) rows.push(['Average', main]); const vr = vsArmRow(r); if (vr) rows.push(vr); }
   if (mdl) {
