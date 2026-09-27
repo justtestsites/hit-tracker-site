@@ -115,6 +115,7 @@ const KEY = {
   hrr: ['Hit, run, or RBI', [
     [`<span class="text-take">81%</span> · hit, run, or RBI`, 'The DraftKings prop: 1 or more hits + runs + RBIs. A hit counts, and so does scoring a run or driving one in without a hit. Our chance is the hit chance plus his own season rate of runs scored after walks and RBIs on outs and walks. Green = 65% or better. Orange = under 58%, the same bars as the hit prop.'],
     ['0 hits · 0 runs · 0 RBI', 'Where he stands today. Once any of the three is 1 or more the prop is done and the card is dimmed.'],
+    ['41% for 2 or more · the 1.5 line', 'The chance he ends with two or more hits + runs + RBIs combined, for apps that set the line at 1.5. A hit that drives in a run counts two, a homer counts three. Most hitters sit in the 40s here; green means 65% or better.'],
     ['-372 · DraftKings says 77%', 'The DraftKings price for 1+ hits + runs + RBIs, pulled every few minutes, and the chance it implies with their cut taken out. FanDuel does not offer this prop. "No line pulled" means DraftKings had no line for him or the pull failed.'],
     ['This season · had one in 118 of 140 games', 'How often he has had at least one hit, run, or RBI in a game this season.'],
     ['Streak · 12 games', 'Consecutive games with at least one hit, run, or RBI. In this mode the streak is about the prop, not just hits.'],
@@ -457,6 +458,24 @@ function hrrChance(r, meta, live) {
   const P = Math.min(.98, Math.max(.03, P0 * MODEL_SCALE));
   return { ...m, pHit: m.pFair, pFair: P, p: P0, extra: x, tier: hrrTier(P) };
 }
+// the 1.5 line: chance of TWO or more hits + runs + RBIs. Each plate appearance gives 0, 1, or 2+ of them:
+// 1 = a hit, or a run/RBI without one; 2+ = a hit that also drives in a run, a homer, or a hit followed by scoring. The 2+ share comes from his season totals.
+function hrr2Chance(r, meta, live) {
+  const m = hitChance(r, meta, live); if (!m) return null;
+  const have = live ? hrrToday(r) : 0, need = 2 - have;
+  if (need <= 0) return { ...m, pFair: 1, p: 1, need: 0 };
+  const x = extraPerPA(r), any = q => 1 - (1 - q) * (1 - x);
+  const units = r.pa_season ? ((r.h_season || 0) + (r.r_season || 0) + (r.rbi_season || 0)) / r.pa_season : .38;   // hits + runs + RBIs per plate appearance, season
+  const share = q => Math.max(0, Math.min(.6, units / Math.max(q, .05) - 1));                                       // of the times he gets one, how often it is two or more
+  const dist = q => { const sh = share(q); return [1 - q, q * (1 - sh), q * sh]; };                                  // 0 / 1 / 2+
+  const vsArm = Math.max(0, m.left - m.vsPen), pas = [];
+  for (let k = 0; k < Math.ceil(m.left); k++) { const w = Math.min(1, m.left - k), q = k < vsArm ? any(m.perPA) : any(m.pPen); const d = dist(q); pas.push([1 - w * (1 - d[0]), w * d[1], w * d[2]]); }
+  let s0 = 1, s1 = 0;                                                                                              // chance of exactly 0 / exactly 1 so far
+  for (const [d0, d1] of pas) { const n0 = s0 * d0, n1 = s0 * d1 + s1 * d0; s0 = n0; s1 = n1; }
+  const P0 = need === 1 ? 1 - s0 : 1 - s0 - s1;
+  const P = Math.min(.98, Math.max(.02, P0 * MODEL_SCALE));
+  return { ...m, pFair: P, p: P0, need };
+}
 function verdictHRR(r, meta, live) {
   if (live && hrrToday(r) > 0) return 'dead';
   const ag = r.again?.verdict, w = wxOf(r.event) || r.weather;
@@ -538,7 +557,7 @@ function tile(r, v, opts = {}) {
   else if (!live) rows.push(['Last 10', l ? `Hit in ${l[0]} of ${l[1]}${dots(r)}` : '—']);
   const lastH = r.last10_hits?.length ? r.last10_hits[r.last10_hits.length - 1] : null;
   const mdl = hitChance(r, opts.meta || null, live);
-  if (hrr) { const hm = hrrChance(r, opts.meta || null, live); if (hm) rows.push(['Chance', `<span class="${hrrCls(hm.pFair)}">${Math.round(hm.pFair * 100)}%</span> <span class="m">· hit, run, or RBI</span>${r.hrr_odds != null ? `<div class="m">DraftKings${r.hrr_live ? ' live' : ''} says ${Math.round((implied(r.hrr_odds) - VIG) * 100)}%</div>` : ''}<div class="m">${Math.round(hm.pHit * 100)}% for a hit alone</div>`]); }
+  if (hrr) { const hm = hrrChance(r, opts.meta || null, live); if (hm) rows.push(['Chance', `<span class="${hrrCls(hm.pFair)}">${Math.round(hm.pFair * 100)}%</span> <span class="m">· hit, run, or RBI</span>${r.hrr_odds != null ? `<div class="m">DraftKings${r.hrr_live ? ' live' : ''} says ${Math.round((implied(r.hrr_odds) - VIG) * 100)}%</div>` : ''}<div class="m">${Math.round(hm.pHit * 100)}% for a hit alone</div>${(() => { const h2 = hrr2Chance(r, opts.meta || null, live); return h2 && h2.need > 0 ? `<div class="m"><span class="${h2.pFair >= TAKE_P ? 'text-take' : ''}">${Math.round(h2.pFair * 100)}%</span> <span class="whitespace-nowrap">for 2 or more</span></div><div class="m">for apps with the 1.5 line</div>` : ''; })()}`]); }
   else if (mdl) rows.push(['Hit chance', `<span class="${chanceCls(mdl.pFair)}">${Math.round(mdl.pFair * 100)}%</span>${r.odds != null ? ` <span class="m">· FanDuel says ${Math.round((implied(r.odds) - VIG) * 100)}%</span>` : ''}`]);
   { const a = avgOf(r); const main = r.avg == null ? '' : a == null ? `${fmtAvg(r.avg)} <span class="m">· only ${r.ab_season} at bats</span>` : `<span class="${hotBat(r) ? 'text-take' : coldBat(r) ? 'text-risky' : ''}">${fmtAvg(a)}</span>${hotBat(r) ? ' <span class="m">· hot bat</span>' : ''}`; if (main) rows.push(['Average', main]); const vr = vsArmRow(r); if (vr) rows.push(vr); }
   if (mdl) {
