@@ -70,6 +70,9 @@ const toDec = a => a > 0 ? 1 + a / 100 : 1 + 100 / Math.abs(a);
 const toAmer = d => d >= 2 ? '+' + Math.round((d - 1) * 100) : String(Math.round(-100 / (d - 1)));
 const implied = a => a > 0 ? 100 / (a + 100) : Math.abs(a) / (Math.abs(a) + 100);
 const PA_PREGAME = 4.2;   // typical plate appearances for a starter
+// how much he really plays: plate appearances per START this season (a start = 3+ trips), and whether he is a regular
+const paPregame = r => r.pa_per_start ? Math.max(3.3, Math.min(4.8, r.pa_per_start)) : PA_PREGAME;
+const partTime = r => r.starts != null && r.games_season >= 20 && (r.starts / r.games_season < .7 || (r.pa_season / r.games_season) < 3.2);
 // Which day's games to show: today's, until every game today is over (or there are none); then the next day's.
 const dayKey = iso => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const GAME_OVER_AFTER = 4 * 3600e3;       // a game is treated as over 4 hours after first pitch unless the live feed says it is still going
@@ -155,7 +158,7 @@ function verdictPre(r) {
   const sp = r.opp_sp?.rating, w = wxOf(r.event) || r.weather, hotAvg = hotBat(r), coldAvg = coldBat(r);
   if (wxRain(w)) return 'risky';
   const m = hitChance(r, null, false);
-  if (m && m.pFair != null) return tierOf(m.pFair);
+  if (m && m.pFair != null) { const t = tierOf(m.pFair); return t === 'take' && partTime(r) ? 'neutral' : t; }
   if (wxCold(w)) return o > -200 ? 'risky' : 'neutral';
   if (o <= -250 && !cold && !coldAvg && sp !== 'tough') return 'take';
   if (hot && o <= -170 && sp !== 'tough') return 'take';
@@ -246,7 +249,7 @@ function hitChance(r, meta, live) {
   const rf = runsFactor(r); now.p = Math.min(.6, now.p * rf);
   if (rf >= 1.03) now.why.push('big-offense game'); else if (rf <= .97) now.why.push('low-scoring game');
   // trips left: first ones against this arm, later ones against the bullpen's best available arms
-  const left = live ? (tripsFromAgain(r.again) != null ? Math.min(remainingPA(inn, r.pa), tripsFromAgain(r.again) + 0.15) : remainingPA(inn, r.pa)) : PA_PREGAME * runsTrips(r);
+  const left = live ? (tripsFromAgain(r.again) != null ? Math.min(remainingPA(inn, r.pa), tripsFromAgain(r.again) + 0.15) : remainingPA(inn, r.pa)) : paPregame(r) * runsTrips(r);
   const starterOut = live ? !!r.sp_out : false;
   const pitches = r.cur_p?.tonight?.pitches || 0;
   const vsArm = live ? (starterOut ? 1 : pitches >= 80 ? 1 : Math.min(left, 2)) : 2.6;
@@ -294,11 +297,21 @@ function hrr1Chance(r, meta, live) {
   const m = hitChance(r, meta, live); if (!m) return null;
   const x = extraPerPA(r), any = q => 1 - (1 - q) * (1 - x);
   const vsArm = Math.min(m.left, m.left - m.vsPen), P0 = 1 - Math.pow(1 - any(m.perPA), vsArm) * Math.pow(1 - any(m.pPen), m.vsPen);
-  const P = Math.min(.98, Math.max(.03, P0 * MODEL_SCALE));
+  const P = formBlend(r, Math.min(.98, Math.max(.03, P0 * MODEL_SCALE)), live, 1);
   return { ...m, pHit: m.pFair, pFair: P, p: P0, extra: x, tier: hrrTier(P) };
 }
 // the 1.5 line: chance of TWO or more hits + runs + RBIs. Each plate appearance gives 0, 1, or 2+ of them:
 // 1 = a hit, or a run/RBI without one; 2+ = a hit that also drives in a run, a homer, or a hit followed by scoring. The 2+ share comes from his season totals.
+// what he has actually done this season (in games he started) and lately (his last 10 starts), folded into the model's number
+// pregame: a real blend, because a full-game rate is exactly what the model is estimating; live: only the recent-form nudge, since the model is "from this point on"
+function formBlend(r, P, live, line) {
+  const st = r.starts || 0; if (st < 15) return P;
+  const season = (line === 2 ? r.hrr2_starts : r.hrr_starts) / st;
+  const n10 = r.starts_last10 || 0, l10 = n10 >= 5 ? (line === 2 ? r.hrr2_last10s : r.hrr_last10s) / n10 : null;
+  let out = live ? P : (line === 2 ? 0.5 * P + 0.5 * season : 0.65 * P + 0.35 * season);
+  if (l10 != null) out *= Math.max(.88, Math.min(1.10, 1 + 0.5 * (l10 - season)));    // cold or hot lately, against his own season
+  return Math.min(.98, Math.max(.02, out));
+}
 function hrr2Chance(r, meta, live) {
   const m = hitChance(r, meta, live); if (!m) return null;
   const have = live ? hrrToday(r) : 0, need = 2 - have;
@@ -313,7 +326,8 @@ function hrr2Chance(r, meta, live) {
   let s0 = 1, s1 = 0;                                                                                              // chance of exactly 0 / exactly 1 so far
   for (const [d0, d1] of pas) { const n0 = s0 * d0, n1 = s0 * d1 + s1 * d0; s0 = n0; s1 = n1; }
   const P0 = need === 1 ? 1 - s0 : 1 - s0 - s1;
-  const P = Math.min(.98, Math.max(.02, P0 * MODEL_SCALE));
+  let P = formBlend(r, Math.min(.98, Math.max(.02, P0 * MODEL_SCALE)), live, 2);
+  if (one && need === 2) P = Math.min(P, one.pFair - .02);                                   // two or more can never be likelier than one or more
   return { ...m, pFair: P, p: P0, need, pHit: m.pFair, pFair1: one?.pFair };
 }
 function verdictHRR(r, meta, live) {
@@ -393,7 +407,7 @@ function tile(r, v, opts = {}) {
   if (live && hrr) rows.push(['Today', `<span class="whitespace-nowrap">${r.hits ?? 0} hit${r.hits === 1 ? '' : 's'}</span> · <span class="whitespace-nowrap">${r.runs ?? 0} run${r.runs === 1 ? '' : 's'}</span> · <span class="whitespace-nowrap">${r.rbi ?? 0} RBI</span>${paWords(r) ? `<div class="m">${paWords(r)}</div>` : ''}`]);
   else if (live) rows.push(['Today', `${r.hits} for ${r.ab}${paWords(r) ? `<div class="m">${paWords(r)}</div>` : (r.pa && r.pa > r.ab ? ` <span class="m">· ${r.pa - r.ab} walk${r.pa - r.ab === 1 ? '' : 's'}</span>` : '')}`]);
   const l = l10n(r);
-  if (!live && hrr) rows.push(['Last 10', r.hrr_last10 != null ? `Had one in ${r.hrr_last10} of 10 <span class="m">· hit, run, or RBI</span>` : '—']);
+  if (!live && hrr) rows.push(['Last 10', hrrLine() === 2 ? (r.hrr2_last10s != null && r.starts_last10 ? `Had two or more in ${r.hrr2_last10s} of ${r.starts_last10} starts` : r.hrr2_last10 != null ? `Had two or more in ${r.hrr2_last10} of 10` : '—') : (r.hrr_last10s != null && r.starts_last10 ? `Had one in ${r.hrr_last10s} of ${r.starts_last10} starts <span class="m">· hit, run, or RBI</span>` : r.hrr_last10 != null ? `Had one in ${r.hrr_last10} of 10 <span class="m">· hit, run, or RBI</span>` : '—')]);
   else if (!live) rows.push(['Last 10', l ? `Hit in ${l[0]} of ${l[1]}${dots(r)}` : '—']);
   const lastH = r.last10_hits?.length ? r.last10_hits[r.last10_hits.length - 1] : null;
   const mdl = hitChance(r, opts.meta || null, live);
@@ -407,10 +421,18 @@ function tile(r, v, opts = {}) {
     if (bits.length) rows.push(['Matchup', bits.join('')]);
   }
   if (hrr) {
-    if (r.hrr_games != null && r.games_season) rows.push(['This season', `<span class="whitespace-nowrap">${r.hrr_games} of ${r.games_season} games</span> <span class="m whitespace-nowrap">· ${Math.round(100 * r.hrr_games / r.games_season)}%</span><div class="m">had a hit, run, or RBI</div>`]);
-    rows.push(['Streak', r.hrr_streak == null ? '—' : r.hrr_streak >= 2 ? `${r.hrr_streak} games<div class="m">with a hit, run, or RBI</div>` : r.hrr_streak === 1 ? 'Had one yesterday' : `None${r.hrr_last10 != null ? ` <span class="m">· one in ${r.hrr_last10} of last 10</span>` : ''}`]);
+    if (hrrLine() === 2) {
+      if (r.hrr2_starts != null && r.starts) rows.push(['This season', `<span class="whitespace-nowrap">${r.hrr2_starts} of ${r.starts} starts</span> <span class="m whitespace-nowrap">· ${Math.round(100 * r.hrr2_starts / r.starts)}%</span><div class="m">had two or more</div>`]);
+      else if (r.hrr2_games != null && r.games_season) rows.push(['This season', `<span class="whitespace-nowrap">${r.hrr2_games} of ${r.games_season} games</span> <span class="m whitespace-nowrap">· ${Math.round(100 * r.hrr2_games / r.games_season)}%</span><div class="m">had two or more</div>`]);
+      if (live && r.hrr2_last10s != null && r.starts_last10) rows.push(['Last 10 starts', `Two or more in ${r.hrr2_last10s} of ${r.starts_last10}`]);
+    } else {
+      if (r.hrr_starts != null && r.starts) rows.push(['This season', `<span class="whitespace-nowrap">${r.hrr_starts} of ${r.starts} starts</span> <span class="m whitespace-nowrap">· ${Math.round(100 * r.hrr_starts / r.starts)}%</span><div class="m">had a hit, run, or RBI</div>`]);
+      else if (r.hrr_games != null && r.games_season) rows.push(['This season', `<span class="whitespace-nowrap">${r.hrr_games} of ${r.games_season} games</span> <span class="m whitespace-nowrap">· ${Math.round(100 * r.hrr_games / r.games_season)}%</span><div class="m">had a hit, run, or RBI</div>`]);
+      rows.push(['Streak', r.hrr_streak == null ? '—' : r.hrr_streak >= 2 ? `${r.hrr_streak} games<div class="m">with a hit, run, or RBI</div>` : r.hrr_streak === 1 ? 'Had one yesterday' : `None${r.hrr_last10s != null && r.starts_last10 ? ` <span class="m">· one in ${r.hrr_last10s} of last ${r.starts_last10} starts</span>` : r.hrr_last10 != null ? ` <span class="m">· one in ${r.hrr_last10} of last 10</span>` : ''}`]);
+    }
   } else
   rows.push(['Streak', r.streak == null ? '—' : r.streak >= 2 ? `${r.streak} games${r.streak_hits ? ` <span class="m">· ${r.streak_hits} hits</span>` : ''}` : r.streak === 1 ? `${lastH ? `${lastH} hit${lastH === 1 ? '' : 's'}` : 'Hit'} yesterday` : 'None' + (live && l ? ` <span class="m">· hit in ${l[0]} of last 10</span>` : '')]);
+  if (partTime(r)) rows.push(['Plays', `<span class="text-risky">Part-time</span> <span class="m">· started ${r.starts} of ${r.games_season} games</span>${!live ? '<div class="m">May not be in the lineup</div>' : ''}`]);
   if (live && r.again && r.again.verdict !== 'unknown') {
     const a = r.again, where = whereUp(a);
     rows.push(['Bats again', `<span class="${againCls(a.verdict)}">${againWord(a.verdict)}</span>${where ? ` <span class="m">· ${where}</span>` : ''}`]);
