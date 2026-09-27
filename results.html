@@ -505,6 +505,7 @@ const empty = t => `<div class="py-12 text-center text-sm text-muted-foreground"
 
 /* ===== results ===== */
 let RANGE = 30, DAY = null;   // DAY = one calendar day, or null for the range
+const bucketLabel = (a, b) => a === 0 ? `Under ${Math.round(b * 100)}%` : b > 1 ? `${Math.round(a * 100)}% and up` : `${Math.round(a * 100)}–${Math.round(b * 100) - 1}%`;
 const pct = x => x == null || isNaN(x) ? '—' : Math.round(x * 100) + '%';
 const money = v => (v < 0 ? '−' : '+') + '$' + Math.abs(Math.round(v)).toLocaleString();
 const winAt = o => o > 0 ? o : 10000 / Math.abs(o);            // profit on $100 if it hits
@@ -584,7 +585,7 @@ function render(days) {
   // calibration: predicted chance vs what happened, every live moment
   const liveE = R.entries.filter(e => e.live && e.m && e.m.pFair != null);
   const buckets = [[0, .3], [.3, .4], [.4, .5], [.5, .6], [.6, .7], [.7, 1.01]];
-  const calRows = buckets.map(([a, b]) => { const xs = liveE.filter(e => e.m.pFair >= a && e.m.pFair < b); const n = xs.length; if (!n) return null; const avgP = xs.reduce((s, e) => s + e.m.pFair, 0) / n, act = xs.filter(e => e.hit).length / n, book = xs.reduce((s, e) => s + implied(e.odds) - VIG, 0) / n; return [`${Math.round(a * 100)}–${Math.round(Math.min(b, 1) * 100)}%`, n, pct(avgP), `<span class="${act >= avgP + .04 ? 'text-take' : act <= avgP - .04 ? 'text-risky' : ''}">${pct(act)}</span>`, pct(book)]; }).filter(Boolean);
+  const calRows = buckets.map(([a, b]) => { const xs = liveE.filter(e => e.m.pFair >= a && e.m.pFair < b); const n = xs.length; if (!n) return null; const avgP = xs.reduce((s, e) => s + e.m.pFair, 0) / n, act = xs.filter(e => e.hit).length / n, book = xs.reduce((s, e) => s + implied(e.odds) - VIG, 0) / n; return [bucketLabel(a, b), n, pct(avgP), `<span class="${act >= avgP + .04 ? 'text-take' : act <= avgP - .04 ? 'text-risky' : ''}">${pct(act)}</span>`, pct(book)]; }).filter(Boolean);
   blocks.push(block('Is the model honest?', 'Every live moment, grouped by what the model said. If "actually hit" tracks "model said", the percentages on the site mean what they say. Green or orange = off by 4 points or more.',
     table(['Model said', 'Moments', 'Model said (avg)', 'Actually hit', 'Book said'], calRows, [1, 2, 3, 4], [2, 4])));
   // where the live Take bar could sit: first moment per hitter per game at or above each bar, and how often he then got a hit
@@ -596,7 +597,7 @@ function render(days) {
   const liveH = R.entries.filter(e => e.live && e.hm && e.hm.pFair != null);
   if (liveH.length) {
     const hb = [[0, .5], [.5, .6], [.6, .7], [.7, .8], [.8, 1.01]];
-    const hcal = hb.map(([a, b]) => { const xs = liveH.filter(e => e.hm.pFair >= a && e.hm.pFair < b); const n = xs.length; if (!n) return null; const avgP = xs.reduce((s, e) => s + e.hm.pFair, 0) / n, act = xs.filter(e => e.hrrHit).length / n; return [`${Math.round(a * 100)}–${Math.round(Math.min(b, 1) * 100)}%`, n, pct(avgP), `<span class="${act >= avgP + .04 ? 'text-take' : act <= avgP - .04 ? 'text-risky' : ''}">${pct(act)}</span>`]; }).filter(Boolean);
+    const hcal = hb.map(([a, b]) => { const xs = liveH.filter(e => e.hm.pFair >= a && e.hm.pFair < b); const n = xs.length; if (!n) return null; const avgP = xs.reduce((s, e) => s + e.hm.pFair, 0) / n, act = xs.filter(e => e.hrrHit).length / n; return [bucketLabel(a, b), n, pct(avgP), `<span class="${act >= avgP + .04 ? 'text-take' : act <= avgP - .04 ? 'text-risky' : ''}">${pct(act)}</span>`]; }).filter(Boolean);
     hblocks.push(block('Over 0.5: is the chance honest?', 'Every live moment where he still had no hit, run, or RBI, grouped by what the model said. "Actually got one" = he had a hit, a run, or an RBI after that moment.',
       table(['Model said', 'Moments', 'Model said (avg)', 'Actually got one'], hcal, [1, 2, 3], [2])));
     const hbar = [.60, .65, .70, .75].map(bar => { const seen = new Set(), xs = []; for (const e of [...liveH].sort((x, y) => (x.t || '').localeCompare(y.t || ''))) { const k = `${e.day}|${e.event}|${e.player}`; if (seen.has(k) || e.hm.pFair < bar) continue; seen.add(k); xs.push(e); } if (!xs.length) return null; const n = xs.length, rate = xs.filter(e => e.hrrHit).length / n; return [`${Math.round(bar * 100)}% or better`, n, `<span class="${n >= 10 && rate >= BREAK_EVEN ? 'text-take' : n >= 10 && rate < .5 ? 'text-risky' : ''}">${pct(rate)}</span>`]; }).filter(Boolean);
@@ -606,7 +607,7 @@ function render(days) {
     const liveH2 = R.entries.filter(e => e.live && e.hm2 && e.hm2.pFair != null && e.hm2.need > 0);
     if (liveH2.length) {
       const b2 = [[0, .3], [.3, .4], [.4, .5], [.5, .6], [.6, 1.01]];
-      const cal2 = b2.map(([a, b]) => { const xs = liveH2.filter(e => e.hm2.pFair >= a && e.hm2.pFair < b); const n = xs.length; if (!n) return null; const avgP = xs.reduce((s, e) => s + e.hm2.pFair, 0) / n, act = xs.filter(e => e.hrr2Hit).length / n; return [`${Math.round(a * 100)}–${Math.round(Math.min(b, 1) * 100)}%`, n, pct(avgP), `<span class="${act >= avgP + .04 ? 'text-take' : act <= avgP - .04 ? 'text-risky' : ''}">${pct(act)}</span>`]; }).filter(Boolean);
+      const cal2 = b2.map(([a, b]) => { const xs = liveH2.filter(e => e.hm2.pFair >= a && e.hm2.pFair < b); const n = xs.length; if (!n) return null; const avgP = xs.reduce((s, e) => s + e.hm2.pFair, 0) / n, act = xs.filter(e => e.hrr2Hit).length / n; return [bucketLabel(a, b), n, pct(avgP), `<span class="${act >= avgP + .04 ? 'text-take' : act <= avgP - .04 ? 'text-risky' : ''}">${pct(act)}</span>`]; }).filter(Boolean);
       hblocks.push(block('Over 1.5: is the chance honest?', 'Every live moment where he still had fewer than two hits + runs + RBIs, grouped by what the model said for two or more. "Got two" = he finished with two or more.',
         table(['Model said', 'Moments', 'Model said (avg)', 'Got two'], cal2, [1, 2, 3], [2])));
       const bar2 = [.50, .55, .60, .65].map(bar => { const seen = new Set(), xs = []; for (const e of [...liveH2].sort((x, y) => (x.t || '').localeCompare(y.t || ''))) { const k = `${e.day}|${e.event}|${e.player}`; if (seen.has(k) || e.hm2.pFair < bar) continue; seen.add(k); xs.push(e); } if (!xs.length) return null; const n = xs.length, rate = xs.filter(e => e.hrr2Hit).length / n; return [`${Math.round(bar * 100)}% or better`, n, `<span class="${n >= 10 && rate >= BREAK_EVEN ? 'text-take' : n >= 10 && rate < .5 ? 'text-risky' : ''}">${pct(rate)}</span>`]; }).filter(Boolean);
