@@ -490,7 +490,7 @@ function evaluate(days) {
     for (const e of picks) { const k = `${e.player}|${e.event}`; (byKey.get(k) || byKey.set(k, []).get(k)).push(e); }
     for (const [k, seq] of byKey) {
       seq.sort((a, b) => (a.t || '').localeCompare(b.t || ''));
-      let firstTake = null, firstNeutral = null, firstRisky = null, firstHot = null, firstTarget = null;
+      let firstTake = null, lastTake = null, firstNeutral = null, firstRisky = null, firstHot = null, firstTarget = null;
       for (const e of seq) {
         const live = !e.pregame && e.inning !== 'Pregame';
         const meta = live ? { inning: e.inning } : null;
@@ -505,13 +505,13 @@ function evaluate(days) {
         const rec = { ...e, v, m, hm, hit, hrrHit, live, day: day.date };
         out.entries.push(rec);
         if (!live) { out.preAll.push(rec); if (v === 'take') out.preTakes.push(rec); continue; }
-        if (v === 'take' && !firstTake) firstTake = rec;
+        if (v === 'take') { if (!firstTake) firstTake = rec; lastTake = rec; }
         if (v === 'neutral' && !firstNeutral) firstNeutral = rec;
         if (v === 'risky' && !firstRisky) firstRisky = rec;
         if (!firstHot && isHotSpot(r, meta) && v !== 'dead') firstHot = rec;
         if (!firstTarget && isTarget(r)) firstTarget = rec;
       }
-      if (firstTake) out.takes.push(firstTake);
+      if (firstTake) { firstTake.takeUntil = lastTake.inning; out.takes.push(firstTake); }
       if (firstNeutral) out.neutrals.push(firstNeutral);
       if (firstRisky) out.riskys.push(firstRisky);
       if (firstHot) out.hot.push(firstHot);
@@ -555,14 +555,16 @@ function render(days) {
   }
   // takes by inning and by price
   const innOf = e => inningNum(e.inning) || 0;
-  const innRows = [['1st–3rd', e => innOf(e) <= 3], ['4th–6th', e => innOf(e) >= 4 && innOf(e) <= 6], ['7th or later', e => innOf(e) >= 7]].map(([l, f]) => { const xs = R.takes.filter(f); return xs.length ? statRow(l, stat(xs)) : null; }).filter(Boolean);
+  const spans = e => { const a = innOf(e), b = inningNum(e.takeUntil) || a; return [a, b]; };   // innings he was a Take, first to last
+  const innRows = [['1st–3rd', (a, b) => a <= 3], ['4th–6th', (a, b) => b >= 4 && a <= 6], ['7th or later', (a, b) => b >= 7]].map(([l, f]) => { const xs = R.takes.filter(e => f(...spans(e))); return xs.length ? statRow(l, stat(xs)) : null; }).filter(Boolean);
   const priceRows = [['-200 or better', e => e.odds <= -200], ['-199 to -120', e => e.odds > -200 && e.odds <= -120], ['-119 to +119', e => e.odds > -120 && e.odds < 120], ['+120 or worse', e => e.odds >= 120]].map(([l, f]) => { const xs = R.takes.filter(f); return xs.length ? statRow(l, stat(xs)) : null; }).filter(Boolean);
-  if (innRows.length) blocks.push(block('Takes by inning', '', table(['Inning at pick', 'Picks', 'Hit rate', 'Book said', 'Profit'], innRows, [1, 2, 3, 4], [3])));
+  if (innRows.length) blocks.push(block('Takes by inning', 'A hitter counts in every inning he was still a Take, so the 4th–6th row is the one that matters for live betting.', table(['Was a Take in the', 'Picks', 'Hit rate', 'Book said', 'Profit'], innRows, [1, 2, 3, 4], [3])));
   if (priceRows.length) blocks.push(block('Takes by price', '', table(['Price at pick', 'Picks', 'Hit rate', 'Book said', 'Profit'], priceRows, [1, 2, 3, 4], [3])));
   // the picks themselves, newest first
   const list = [...R.takes].sort((a, b) => (b.t || '').localeCompare(a.t || ''));
-  if (list.length) blocks.push(block('Every live Take', 'Newest first. Chance is what the model said at that moment; result is whether he got a hit afterward.',
-    table(['Date', 'Player', 'Game', 'Inning', 'Price', 'Chance', 'Result'], list.map(e => [e.day.slice(5), `<span class="font-medium text-foreground">${esc(e.player)}</span>`, esc(shortEvent(e.event)), esc(inningWords(e.inning)), odds(e.odds), pct(e.m?.pFair), e.hit ? '<span class="text-take">Hit</span>' : '<span class="text-risky">No hit</span>']), [4, 5], [2, 3])));
+  const whenHit = e => { const w = e.final?.hit_when; if (!e.hit) return 'No hit'; if (!w) return 'Hit'; return esc(w[e.hits ?? 0] || w[w.length - 1] || 'Hit'); };   // his next hit after the pick = hit number (hits at the moment + 1)
+  if (list.length) blocks.push(block('Every live Take', 'Newest first. "When to take" is the first inning he was a Take (and the last one he still was); "When it hit" is the inning of his next hit after that.',
+    table(['Date', 'Player', 'Game', 'When to take', 'Price', 'Chance', 'When it hit'], list.map(e => [e.day.slice(5), `<span class="font-medium text-foreground">${esc(e.player)}</span>`, esc(shortEvent(e.event)), `<div class="whitespace-nowrap">${esc(inningWords(e.inning))}</div>${e.takeUntil && (inningNum(e.takeUntil) || 0) > (inningNum(e.inning) || 0) ? `<div class="text-xs whitespace-nowrap">still a Take through the ${esc(inningWords(e.takeUntil).replace(/^(Top|Bottom|Middle|End) of the /, ''))}</div>` : ''}`, odds(e.odds), pct(e.m?.pFair), e.hit ? `<span class="text-take whitespace-nowrap">${whenHit(e)}</span>` : '<span class="text-risky">No hit</span>']), [4, 5], [2, 3])));
   $('#blocks').innerHTML = blocks.join('');
 }
 async function boot() {
