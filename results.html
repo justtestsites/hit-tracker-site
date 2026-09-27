@@ -290,6 +290,24 @@ function hrrChance(r, meta, live) {
   const P = Math.min(.98, Math.max(.03, P0 * MODEL_SCALE));
   return { ...m, pHit: m.pFair, pFair: P, p: P0, extra: x, tier: hrrTier(P) };
 }
+// the 1.5 line: chance of TWO or more hits + runs + RBIs. Each plate appearance gives 0, 1, or 2+ of them:
+// 1 = a hit, or a run/RBI without one; 2+ = a hit that also drives in a run, a homer, or a hit followed by scoring. The 2+ share comes from his season totals.
+function hrr2Chance(r, meta, live) {
+  const m = hitChance(r, meta, live); if (!m) return null;
+  const have = live ? hrrToday(r) : 0, need = 2 - have;
+  if (need <= 0) return { ...m, pFair: 1, p: 1, need: 0 };
+  const x = extraPerPA(r), any = q => 1 - (1 - q) * (1 - x);
+  const units = r.pa_season ? ((r.h_season || 0) + (r.r_season || 0) + (r.rbi_season || 0)) / r.pa_season : .38;   // hits + runs + RBIs per plate appearance, season
+  const share = q => Math.max(0, Math.min(.6, units / Math.max(q, .05) - 1));                                       // of the times he gets one, how often it is two or more
+  const dist = q => { const sh = share(q); return [1 - q, q * (1 - sh), q * sh]; };                                  // 0 / 1 / 2+
+  const vsArm = Math.max(0, m.left - m.vsPen), pas = [];
+  for (let k = 0; k < Math.ceil(m.left); k++) { const w = Math.min(1, m.left - k), q = k < vsArm ? any(m.perPA) : any(m.pPen); const d = dist(q); pas.push([1 - w * (1 - d[0]), w * d[1], w * d[2]]); }
+  let s0 = 1, s1 = 0;                                                                                              // chance of exactly 0 / exactly 1 so far
+  for (const [d0, d1] of pas) { const n0 = s0 * d0, n1 = s0 * d1 + s1 * d0; s0 = n0; s1 = n1; }
+  const P0 = need === 1 ? 1 - s0 : 1 - s0 - s1;
+  const P = Math.min(.98, Math.max(.02, P0 * MODEL_SCALE));
+  return { ...m, pFair: P, p: P0, need };
+}
 function verdictHRR(r, meta, live) {
   if (live && hrrToday(r) > 0) return 'dead';
   const ag = r.again?.verdict, w = wxOf(r.event) || r.weather;
@@ -371,7 +389,7 @@ function tile(r, v, opts = {}) {
   else if (!live) rows.push(['Last 10', l ? `Hit in ${l[0]} of ${l[1]}${dots(r)}` : '—']);
   const lastH = r.last10_hits?.length ? r.last10_hits[r.last10_hits.length - 1] : null;
   const mdl = hitChance(r, opts.meta || null, live);
-  if (hrr) { const hm = hrrChance(r, opts.meta || null, live); if (hm) rows.push(['Chance', `<span class="${hrrCls(hm.pFair)}">${Math.round(hm.pFair * 100)}%</span> <span class="m">· hit, run, or RBI</span>${r.hrr_odds != null ? `<div class="m">DraftKings${r.hrr_live ? ' live' : ''} says ${Math.round((implied(r.hrr_odds) - VIG) * 100)}%</div>` : ''}<div class="m">${Math.round(hm.pHit * 100)}% for a hit alone</div>`]); }
+  if (hrr) { const hm = hrrChance(r, opts.meta || null, live); if (hm) rows.push(['Chance', `<span class="${hrrCls(hm.pFair)}">${Math.round(hm.pFair * 100)}%</span> <span class="m">· hit, run, or RBI</span>${r.hrr_odds != null ? `<div class="m">DraftKings${r.hrr_live ? ' live' : ''} says ${Math.round((implied(r.hrr_odds) - VIG) * 100)}%</div>` : ''}<div class="m">${Math.round(hm.pHit * 100)}% for a hit alone</div>${(() => { const h2 = hrr2Chance(r, opts.meta || null, live); return h2 && h2.need > 0 ? `<div class="m"><span class="${h2.pFair >= TAKE_P ? 'text-take' : ''}">${Math.round(h2.pFair * 100)}%</span> <span class="whitespace-nowrap">for 2 or more</span></div><div class="m">for apps with the 1.5 line</div>` : ''; })()}`]); }
   else if (mdl) rows.push(['Hit chance', `<span class="${chanceCls(mdl.pFair)}">${Math.round(mdl.pFair * 100)}%</span>${r.odds != null ? ` <span class="m">· FanDuel says ${Math.round((implied(r.odds) - VIG) * 100)}%</span>` : ''}`]);
   { const a = avgOf(r); const main = r.avg == null ? '' : a == null ? `${fmtAvg(r.avg)} <span class="m">· only ${r.ab_season} at bats</span>` : `<span class="${hotBat(r) ? 'text-take' : coldBat(r) ? 'text-risky' : ''}">${fmtAvg(a)}</span>${hotBat(r) ? ' <span class="m">· hot bat</span>' : ''}`; if (main) rows.push(['Average', main]); const vr = vsArmRow(r); if (vr) rows.push(vr); }
   if (mdl) {
@@ -502,7 +520,8 @@ function evaluate(days) {
         const nowHRR = live ? ((e.hits ?? 0) + (e.runs ?? 0) + (e.rbi ?? 0)) : 0, finHRR = (e.final.hits ?? 0) + (e.final.runs ?? 0) + (e.final.rbi ?? 0);
         const hm = nowHRR === 0 && e.final.runs != null ? hrrChance(r, meta, live) : null;
         const hrrHit = finHRR > nowHRR;
-        const rec = { ...e, v, m, hm, hit, hrrHit, live, day: day.date };
+        const hm2 = nowHRR < 2 && e.final.runs != null ? hrr2Chance(r, meta, live) : null, hrr2Hit = finHRR >= 2;   // the 1.5 line
+        const rec = { ...e, v, m, hm, hm2, hit, hrrHit, hrr2Hit, live, day: day.date };
         out.entries.push(rec);
         if (!live) { out.preAll.push(rec); if (v === 'take') out.preTakes.push(rec); continue; }
         if (v === 'take') { if (!firstTake) firstTake = rec; lastTake = rec; }
@@ -550,6 +569,17 @@ function render(days) {
     blocks.push(block('Is the hit, run, or RBI chance honest?', 'Every live moment where he still had no hit, run, or RBI, grouped by what the model said. "Actually got one" = he had a hit, a run, or an RBI after that moment.',
       table(['Model said', 'Moments', 'Model said (avg)', 'Actually got one'], hcal, [1, 2, 3], [2])));
     const hbar = [.60, .65, .70, .75].map(bar => { const seen = new Set(), xs = []; for (const e of [...liveH].sort((x, y) => (x.t || '').localeCompare(y.t || ''))) { const k = `${e.day}|${e.event}|${e.player}`; if (seen.has(k) || e.hm.pFair < bar) continue; seen.add(k); xs.push(e); } if (!xs.length) return null; const n = xs.length, rate = xs.filter(e => e.hrrHit).length / n; return [`${Math.round(bar * 100)}% or better`, n, `<span class="${n >= 10 && rate >= BREAK_EVEN ? 'text-take' : n >= 10 && rate < .5 ? 'text-risky' : ''}">${pct(rate)}</span>`]; }).filter(Boolean);
+    // the 1.5 line: two or more
+    const liveH2 = R.entries.filter(e => e.live && e.hm2 && e.hm2.pFair != null && e.hm2.need > 0);
+    if (liveH2.length) {
+      const b2 = [[0, .3], [.3, .4], [.4, .5], [.5, .6], [.6, 1.01]];
+      const cal2 = b2.map(([a, b]) => { const xs = liveH2.filter(e => e.hm2.pFair >= a && e.hm2.pFair < b); const n = xs.length; if (!n) return null; const avgP = xs.reduce((s, e) => s + e.hm2.pFair, 0) / n, act = xs.filter(e => e.hrr2Hit).length / n; return [`${Math.round(a * 100)}–${Math.round(Math.min(b, 1) * 100)}%`, n, pct(avgP), `<span class="${act >= avgP + .04 ? 'text-take' : act <= avgP - .04 ? 'text-risky' : ''}">${pct(act)}</span>`]; }).filter(Boolean);
+      blocks.push(block('Is the "2 or more" chance honest? (the 1.5 line)', 'Every live moment where he still had fewer than two hits + runs + RBIs, grouped by what the model said for two or more. "Got two" = he finished with two or more.',
+        table(['Model said', 'Moments', 'Model said (avg)', 'Got two'], cal2, [1, 2, 3], [2])));
+      const bar2 = [.50, .55, .60, .65].map(bar => { const seen = new Set(), xs = []; for (const e of [...liveH2].sort((x, y) => (x.t || '').localeCompare(y.t || ''))) { const k = `${e.day}|${e.event}|${e.player}`; if (seen.has(k) || e.hm2.pFair < bar) continue; seen.add(k); xs.push(e); } if (!xs.length) return null; const n = xs.length, rate = xs.filter(e => e.hrr2Hit).length / n; return [`${Math.round(bar * 100)}% or better`, n, `<span class="${n >= 10 && rate >= BREAK_EVEN ? 'text-take' : n >= 10 && rate < .5 ? 'text-risky' : ''}">${pct(rate)}</span>`]; }).filter(Boolean);
+      if (bar2.length) blocks.push(block('Where should the "2 or more" bar be?', 'Every hitter counted once per game, at the first moment the model gave him at least this chance of two or more. Green = clears the 58% a two-leg ticket needs.',
+        table(['Bar', 'Picks', 'Got two'], bar2, [1, 2], [])));
+    }
     blocks.push(block('Where should the hit, run, or RBI bar be?', `Every hitter counted once per game, at the first moment the model gave him at least this chance with none of the three yet. Take is ${Math.round(HRR_TAKE * 100)}% today and hitters under ${Math.round(SHOW_HRR * 100)}% are not shown.`,
       table(['Bar', 'Picks', 'Got one'], hbar, [1, 2], [])));
   }
